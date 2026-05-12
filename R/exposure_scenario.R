@@ -1,15 +1,21 @@
 #' Create an inhalation QMRA exposure scenario
 #'
-#' @param pathogen_name Character. A descriptive name for the scenario (e.g., "Office outbreak").
-#'   If not provided but `pathogen_id` is given, `pathogen_id` will be used as the name.
+#' @param pathogen_name Character. A descriptive name for the scenario. If not provided but
+#'   `pathogen_id` is given, `pathogen_id` will be used as the name.
 #' @param pathogen_id Character. English ID of the pathogen as in the built-in database
 #'   (e.g., "legionella pneumophila", "escherichia coli"). If provided and `dr_pars` is NULL,
 #'   dose-response parameters will be loaded automatically from the database.
-#' @param C_air_dist A function that generates air concentration samples (copies/m³).
-#' @param IR_dist A function that generates inhalation rate samples (m³/h).
-#' @param t_exp Single numeric or function for exposure duration (h).
-#' @param dr_pars List of dose-response parameters (e.g., `list(type = "exponential", k = 0.0054)`).
-#'   If `NULL`, the function will try to load parameters from the built-in database using `pathogen_id`.
+#' @param C_air_dist Function. A function that generates air concentration samples (copies/m³).
+#' @param IR_dist Function. A function that generates inhalation rate samples (m³/h).
+#' @param t_exp Single numeric or function for exposure duration (hours).
+#' @param dr_pars List. Dose-response parameters (e.g., `list(type = "exponential", k = 0.0054)`).
+#'   If `NULL`, the function will load parameters from the built-in database using `pathogen_id`.
+#' @param dr_choice Integer or character. Choice of which parameter set to use when the pathogen
+#'   has multiple records in the database. An integer selects the row number (from the
+#'   `pathogen_info()` result); a character string can be `"exponential"` or
+#'   `"exact_beta_poisson"` to select the first record of that model type. If `NULL` and
+#'   multiple records exist, the function will ask interactively in an R session, or raise an
+#'   error in non-interactive scripts.
 #'
 #' @return An object of class `airqmra_scenario`.
 #' @export
@@ -18,16 +24,16 @@ new_scenario <- function(pathogen_name = NULL,
                          C_air_dist    = function(n) stats::rlnorm(n, meanlog = log(50), sdlog = log(1.8)),
                          IR_dist       = function(n) stats::rnorm(n, mean = 0.7, sd = 0.1),
                          t_exp         = 1.0,
-                         dr_pars       = NULL) {
+                         dr_pars       = NULL,
+                         dr_choice     = NULL) {
 
-  # --- 处理剂量-反应参数 ---
+  # --- 如果手动提供了 dr_pars，优先使用 ---
   if (!is.null(dr_pars)) {
-    # 用户手动提供了 dr_pars，直接使用
     if (!is.null(pathogen_id)) {
       message("Both 'pathogen_id' and 'dr_pars' provided. Using 'dr_pars' and ignoring 'pathogen_id'.")
     }
   } else {
-    # dr_pars 为空，尝试从数据库获取
+    # --- dr_pars 为空，必须提供 pathogen_id ---
     if (is.null(pathogen_id)) {
       stop("Either 'dr_pars' or 'pathogen_id' must be provided.")
     }
@@ -38,28 +44,77 @@ new_scenario <- function(pathogen_name = NULL,
       stop("No pathogen found for '", pathogen_id, "'. Check spelling or use 'pathogen_info()' to explore the database.")
     }
 
-    # 如果有多条匹配，默认选用第一条并提示
-    if (nrow(rec) > 1) {
-      message("Multiple records found for '", pathogen_id, "'. Using the first one:\n",
-              "  model: ", rec$model[1],
-              ", alpha: ", rec$alpha[1],
-              ", beta: ", rec$beta[1],
-              ", N50: ", rec$N50[1],
-              ", k: ", rec$k[1])
-      rec <- rec[1, ]
+    # --- 处理多套参数的选择逻辑 ---
+    if (nrow(rec) == 1) {
+      chosen <- 1L
+      if (!is.null(dr_choice) && dr_choice != 1) {
+        warning("Only one parameter set exists; ignoring 'dr_choice'.")
+      }
+    } else {
+      # 有多条记录
+      if (is.null(dr_choice)) {
+        if (interactive()) {
+          # 创建清晰的菜单项
+          labels <- paste0(
+            "[", seq_len(nrow(rec)), "] ",
+            rec$model,
+            ifelse(rec$model == "exponential",
+                   paste0(" (k=", format(rec$k, digits=3), ")"),
+                   paste0(" (alpha=", rec$alpha, ", beta=", format(rec$beta, digits=3), ")")
+            )
+          )
+          cat("\nMultiple parameter sets found for '", pathogen_id, "':\n", sep="")
+          cat("Choose a number and press Enter (0 to abort):\n")
+          choice_idx <- menu(labels, title = "Select a parameter set by number:")
+          if (choice_idx == 0) {
+            stop("Selection aborted by user.")
+          }
+          chosen <- choice_idx
+        } else {
+          # 非交互环境：报错并列出选项
+          msg <- paste0(
+            "Multiple parameter sets found for '", pathogen_id, "'. ",
+            "Please specify 'dr_choice' as an integer (1-", nrow(rec), ") or model type.\n",
+            "Available options:\n",
+            paste(capture.output(print(rec[, c("model","alpha","beta","N50","k")])), collapse="\n")
+          )
+          stop(msg)
+        }
+      } else {
+        # dr_choice 已提供
+        if (is.numeric(dr_choice)) {
+          idx <- as.integer(dr_choice)
+          if (idx < 1 || idx > nrow(rec)) {
+            stop("'dr_choice' must be between 1 and ", nrow(rec), ".")
+          }
+          chosen <- idx
+        } else if (is.character(dr_choice)) {
+          # 按模型名匹配，取第一个匹配的
+          model_match <- which(tolower(rec$model) == tolower(dr_choice))
+          if (length(model_match) == 0) {
+            stop("No record with model '", dr_choice, "'. Available models: ",
+                 paste(unique(rec$model), collapse=", "))
+          }
+          chosen <- model_match[1]
+        } else {
+          stop("'dr_choice' must be an integer index or a model name (e.g., 'exponential').")
+        }
+      }
     }
 
-    # 根据模型类型构建 dr_pars
-    model <- rec$model
+    # --- 从选定的行构建 dr_pars ---
+    chosen_row <- rec[chosen, ]
+    model <- chosen_row$model
     dr_pars <- list(type = model)
 
     if (model == "exponential") {
-      if (is.na(rec$k)) stop("Parameter 'k' is missing in the database for this pathogen.")
-      dr_pars$k <- rec$k
+      if (is.na(chosen_row$k)) stop("Parameter 'k' is missing in the database for this record.")
+      dr_pars$k <- chosen_row$k
     } else if (model == "exact_beta_poisson") {
-      if (is.na(rec$alpha) || is.na(rec$beta)) stop("Parameters 'alpha' or 'beta' are missing in the database.")
-      dr_pars$alpha <- rec$alpha
-      dr_pars$beta  <- rec$beta
+      if (is.na(chosen_row$alpha) || is.na(chosen_row$beta))
+        stop("Parameters 'alpha' or 'beta' are missing in the database for this record.")
+      dr_pars$alpha <- chosen_row$alpha
+      dr_pars$beta  <- chosen_row$beta
     } else {
       stop("Unknown model type in database: ", model)
     }

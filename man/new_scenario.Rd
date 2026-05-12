@@ -10,25 +10,33 @@ new_scenario(
   C_air_dist = function(n) stats::rlnorm(n, meanlog = log(50), sdlog = log(1.8)),
   IR_dist = function(n) stats::rnorm(n, mean = 0.7, sd = 0.1),
   t_exp = 1,
-  dr_pars = NULL
+  dr_pars = NULL,
+  dr_choice = NULL
 )
 }
 \arguments{
-\item{pathogen_name}{Character. A descriptive name for the scenario (e.g., "Office outbreak").
-If not provided but \code{pathogen_id} is given, \code{pathogen_id} will be used as the name.}
+\item{pathogen_name}{Character. A descriptive name for the scenario. If not provided but
+\code{pathogen_id} is given, \code{pathogen_id} will be used as the name.}
 
 \item{pathogen_id}{Character. English ID of the pathogen as in the built-in database
 (e.g., "legionella pneumophila", "escherichia coli"). If provided and \code{dr_pars} is NULL,
 dose-response parameters will be loaded automatically from the database.}
 
-\item{C_air_dist}{A function that generates air concentration samples (copies/m³).}
+\item{C_air_dist}{Function. A function that generates air concentration samples (copies/m³).}
 
-\item{IR_dist}{A function that generates inhalation rate samples (m³/h).}
+\item{IR_dist}{Function. A function that generates inhalation rate samples (m³/h).}
 
-\item{t_exp}{Single numeric or function for exposure duration (h).}
+\item{t_exp}{Single numeric or function for exposure duration (hours).}
 
-\item{dr_pars}{List of dose-response parameters (e.g., \code{list(type = "exponential", k = 0.0054)}).
-If \code{NULL}, the function will try to load parameters from the built-in database using \code{pathogen_id}.}
+\item{dr_pars}{List. Dose-response parameters (e.g., \code{list(type = "exponential", k = 0.0054)}).
+If \code{NULL}, the function will load parameters from the built-in database using \code{pathogen_id}.}
+
+\item{dr_choice}{Integer or character. Choice of which parameter set to use when the pathogen
+has multiple records in the database. An integer selects the row number (from the
+\code{pathogen_info()} result); a character string can be \code{"exponential"} or
+\code{"exact_beta_poisson"} to select the first record of that model type. If \code{NULL} and
+multiple records exist, the function will ask interactively in an R session, or raise an
+error in non-interactive scripts.}
 }
 \value{
 An object of class \code{airqmra_scenario}.
