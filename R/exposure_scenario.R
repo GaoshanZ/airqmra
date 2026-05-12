@@ -25,40 +25,30 @@ new_scenario <- function(pathogen_name,
 }
 
 
-#' Dose-response calculation
-#' @param dose Numeric vector of inhaled dose (copies).
-#' @param type Character. Model type, currently only "exponential".
-#' @param k Numeric. Pathogen infectivity parameter (per copy).
-#' @return Vector of infection probabilities.
-#' @export
-dose_response <- function(dose, type = "exponential", k = 0.0054) {
-  if (type == "exponential") {
-    return(1 - exp(-k * dose))
-  }
-  stop("Other models not yet implemented.")
-}
 
 
 #' Run 1D Monte Carlo QMRA simulation
+#'
 #' @param scenario An `airqmra_scenario` object.
 #' @param n_iter Number of Monte Carlo iterations.
-#' @return A numeric vector of infection risk.
+#' @return A numeric vector of infection risk with class `airqmra_result`.
 #' @export
 run_qmra_1d <- function(scenario, n_iter = 1e5) {
-  # 生成所有输入变量的随机样本
+  # Generate random samples for all input variables
   C   <- scenario$C_air_dist(n_iter)
   IR  <- scenario$IR_dist(n_iter)
   t   <- scenario$t_exp_dist(n_iter)
 
-  # 计算吸入剂量
+  # Calculate inhaled dose
   dose <- C * IR * t
 
-  # 计算风险
-  risk <- dose_response(
-    dose,
-    type = scenario$dr_pars$type,
-    k    = scenario$dr_pars$k
-  )
+  # Extract dose-response type and parameters
+  dr  <- scenario$dr_pars
+  type <- dr$type
+  dr_args <- dr[names(dr) != "type"]  # all parameters except 'type'
+
+  # Dispatch to dose_response
+  risk <- do.call(dose_response, c(list(dose = dose, type = type), dr_args))
 
   class(risk) <- c("airqmra_result", "numeric")
   risk

@@ -12,7 +12,7 @@ run_qmra_1d(scenario, n_iter = 1e+05)
 \item{n_iter}{Number of Monte Carlo iterations.}
 }
 \value{
-A numeric vector of infection risk.
+A numeric vector of infection risk with class \code{airqmra_result}.
 }
 \description{
 Run 1D Monte Carlo QMRA simulation
