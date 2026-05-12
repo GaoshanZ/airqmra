@@ -5,15 +5,21 @@
 \title{Create an inhalation QMRA exposure scenario}
 \usage{
 new_scenario(
-  pathogen_name,
+  pathogen_name = NULL,
+  pathogen_id = NULL,
   C_air_dist = function(n) stats::rlnorm(n, meanlog = log(50), sdlog = log(1.8)),
   IR_dist = function(n) stats::rnorm(n, mean = 0.7, sd = 0.1),
   t_exp = 1,
-  dr_pars = list(type = "exponential", k = 0.0054)
+  dr_pars = NULL
 )
 }
 \arguments{
-\item{pathogen_name}{Character. Name of the pathogen (e.g., "SARS-CoV-2").}
+\item{pathogen_name}{Character. A descriptive name for the scenario (e.g., "Office outbreak").
+If not provided but \code{pathogen_id} is given, \code{pathogen_id} will be used as the name.}
+
+\item{pathogen_id}{Character. English ID of the pathogen as in the built-in database
+(e.g., "legionella pneumophila", "escherichia coli"). If provided and \code{dr_pars} is NULL,
+dose-response parameters will be loaded automatically from the database.}
 
 \item{C_air_dist}{A function that generates air concentration samples (copies/m³).}
 
@@ -21,7 +27,8 @@ new_scenario(
 
 \item{t_exp}{Single numeric or function for exposure duration (h).}
 
-\item{dr_pars}{List of dose-response parameters.}
+\item{dr_pars}{List of dose-response parameters (e.g., \code{list(type = "exponential", k = 0.0054)}).
+If \code{NULL}, the function will try to load parameters from the built-in database using \code{pathogen_id}.}
 }
 \value{
 An object of class \code{airqmra_scenario}.
