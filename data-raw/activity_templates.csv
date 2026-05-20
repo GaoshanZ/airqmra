@@ -1,0 +1,6 @@
+﻿template_id,Sleeping,Sedentary,Light_intensity,Moderate_intensity,High_intensity,Very_High_intensity,time_unit
+office_worker,480,360,240,60,0,0,min/d
+outdoor_worker,420,120,240,300,120,60,min/d
+student,480,300,300,120,60,0,min/d
+elderly_retired,540,480,180,0,0,0,min/d
+child_6_12,600,360,300,120,60,0,min/d
