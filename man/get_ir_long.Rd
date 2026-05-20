@@ -7,20 +7,13 @@
 get_ir_long(group, fallback = c("Adult"))
 }
 \arguments{
-\item{group}{Character. Population classification (e.g., "Adult", "18Y-44Y",
-"Male", "Urban"). Single dimension only.}
+\item{group}{Character. Population classification (e.g., "Adult", "18Y-44Y").}
 
-\item{fallback}{Character vector. Fallback classifications in priority order.
-Default: c("Adult").}
+\item{fallback}{Character vector. Fallback classifications.}
 }
 \value{
 A list with elements: dist, log_mean, log_sd, unit, ref.
-Returns NULL if no record found.
 }
 \description{
 Get long‑term inhalation rate (daily average, m3/d)
-}
-\examples{
-get_ir_long("18Y-44Y")
-get_ir_long("Beijing", fallback = c("Urban", "Adult"))
 }

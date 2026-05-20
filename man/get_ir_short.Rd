@@ -9,9 +9,7 @@ get_ir_short(group, activity, fallback = c("Adult"))
 \arguments{
 \item{group}{Character. Population classification.}
 
-\item{activity}{Character. Activity intensity, e.g. "Sleeping",
-"Sedentary", "Light-intensity", "Moderate-intensity",
-"High-intensity", "Very_High-intensity".}
+\item{activity}{Character. Activity intensity, e.g. "Sleeping", "Light_intensity".}
 
 \item{fallback}{Character vector. Fallback classifications.}
 }

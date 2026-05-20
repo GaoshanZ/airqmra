@@ -96,7 +96,7 @@ time_table <- time_long %>%
     time_unit = "min/d"
   ) %>%
   select(classification, season, microenvironment, time_dist,
-         time_log_mean = log_mean, time_log_sd = log_sd, ref)
+         time_log_mean = log_mean, time_log_sd = log_sd, time_unit, ref)
 
 # ================= 保存为包内数据 =================
 usethis::use_data(ir_long_table, ir_short_table, time_table, overwrite = TRUE)

@@ -2,7 +2,7 @@
 % Please edit documentation in R/exposure_query.R
 \name{get_time}
 \alias{get_time}
-\title{Get time‑activity pattern (minutes per day) for a population group}
+\title{Get time‑activity pattern (minutes per day)}
 \usage{
 get_time(
   group,
@@ -24,5 +24,5 @@ get_time(
 A list with elements: dist, log_mean, log_sd, unit, ref.
 }
 \description{
-Get time‑activity pattern (minutes per day) for a population group
+Get time‑activity pattern (minutes per day)
 }
