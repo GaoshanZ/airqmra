@@ -1,60 +1,81 @@
 #' Create an inhalation QMRA exposure scenario
 #'
-#' @param pathogen_name Character. A descriptive name for the scenario. If not provided but
-#'   `pathogen_id` is given, `pathogen_id` will be used as the name.
-#' @param pathogen_id Character. English ID of the pathogen as in the built-in database
-#'   (e.g., "legionella pneumophila", "escherichia coli"). If provided and `dr_pars` is NULL,
-#'   dose-response parameters will be loaded automatically from the database.
+#' @param pathogen_name Character. A descriptive name for the scenario.
+#'   If not provided, `pathogen_id` or a generic name will be used.
+#' @param pathogen_id Character. English ID of the pathogen as in the built-in database.
+#'   If `dr_pars` is NULL, dose-response parameters will be loaded from the database.
 #' @param C_air_dist Function. A function that generates air concentration samples (copies/m³).
+#'   Defaults to a lognormal distribution with GM=50, GSD=1.8.
 #' @param IR_dist Function. A function that generates inhalation rate samples (m³/h).
+#'   If not provided manually and `exposure_group` is given, it will be loaded automatically
+#'   from the built-in exposure database (converted from m³/d to m³/h).
 #' @param t_exp Single numeric or function for exposure duration (hours).
+#'   If not provided manually and `exposure_group` is given, it will be loaded automatically
+#'   from the time-activity database (converted from min/d to hours) or from an activity template.
 #' @param dr_pars List. Dose-response parameters (e.g., `list(type = "exponential", k = 0.0054)`).
-#'   If `NULL`, the function will load parameters from the built-in database using `pathogen_id`.
-#' @param dr_choice Integer or character. Choice of which parameter set to use when the pathogen
-#'   has multiple records in the database. An integer selects the row number (from the
-#'   `pathogen_info()` result); a character string can be `"exponential"` or
-#'   `"exact_beta_poisson"` to select the first record of that model type. If `NULL` and
-#'   multiple records exist, the function will ask interactively in an R session, or raise an
-#'   error in non-interactive scripts.
+#'   If NULL, parameters will be loaded from the pathogen database using `pathogen_id`.
+#' @param dr_choice Integer or character. Choice of parameter set when multiple records exist.
+#' @param exposure_group Character. Population classification for exposure parameters
+#'   (e.g., "Adult", "Male", "18Y-44Y"). If provided, `IR_dist` and `t_exp` will be
+#'   overwritten with database values unless manually specified.
+#' @param microenvironment Character. "Indoor" or "Outdoor". Default "Indoor".
+#' @param season Character. "Annual", "Spring & Autumn", "Summer", "Winter". Default "Annual".
+#' @param activity_template Character. Activity template ID (e.g., "office_worker").
+#'   If provided together with `activity_intensity`, the exposure duration will be set to
+#'   the fixed minutes of that intensity from the template (converted to hours).
+#' @param activity_intensity Character. Activity intensity (e.g., "Light_intensity").
+#'   Used with `activity_template` to set a fixed exposure duration.
+#' @param AG Numeric or function. Fraction of deposited pathogens that initiate infection.
+#'   Default is 1 (no additional reduction). Accepts a fixed value or a distribution function.
+#' @param deposition Numeric or function. Fraction of inhaled particles that deposit in the lung.
+#'   If NULL (default), loaded automatically from the deposition database based on
+#'   `population_deposition` (site "PUL").
+#' @param survival Numeric or function. Fraction of airborne pathogens that remain viable upon inhalation.
+#'   If NULL (default), loaded automatically from the survival database.
+#' @param population_deposition Character. Population group for deposition data lookup.
+#'   One of "Male", "Female", "Child", "Senior". Default "Male".
+#' @param fallback Character vector. Fallback classifications for exposure data,
+#'   in priority order. Default `c("Adult")`.
 #'
 #' @return An object of class `airqmra_scenario`.
 #' @export
 new_scenario <- function(pathogen_name = NULL,
                          pathogen_id   = NULL,
                          C_air_dist    = function(n) stats::rlnorm(n, meanlog = log(50), sdlog = log(1.8)),
-                         IR_dist       = function(n) stats::rnorm(n, mean = 0.7, sd = 0.1),
-                         t_exp         = 1.0,
+                         IR_dist       = NULL,
+                         t_exp         = NULL,
                          dr_pars       = NULL,
-                         dr_choice     = NULL) {
+                         dr_choice     = NULL,
+                         exposure_group = NULL,
+                         microenvironment = "Indoor",
+                         season        = "Annual",
+                         activity_template = NULL,
+                         activity_intensity = NULL,
+                         AG            = 1.0,
+                         deposition    = NULL,
+                         survival      = NULL,
+                         population_deposition = "Male",
+                         fallback      = c("Adult")) {
 
-  # --- 如果手动提供了 dr_pars，优先使用 ---
+  # ---------- 剂量反应参数处理 ----------
   if (!is.null(dr_pars)) {
     if (!is.null(pathogen_id)) {
       message("Both 'pathogen_id' and 'dr_pars' provided. Using 'dr_pars' and ignoring 'pathogen_id'.")
     }
   } else {
-    # --- dr_pars 为空，必须提供 pathogen_id ---
     if (is.null(pathogen_id)) {
       stop("Either 'dr_pars' or 'pathogen_id' must be provided.")
     }
-
-    # 查询数据库
     rec <- pathogen_info(pathogen_id)
     if (nrow(rec) == 0) {
-      stop("No pathogen found for '", pathogen_id, "'. Check spelling or use 'pathogen_info()' to explore the database.")
+      stop("No pathogen found for '", pathogen_id, "'.")
     }
-
-    # --- 处理多套参数的选择逻辑 ---
+    # 多参数选择逻辑
     if (nrow(rec) == 1) {
       chosen <- 1L
-      if (!is.null(dr_choice) && dr_choice != 1) {
-        warning("Only one parameter set exists; ignoring 'dr_choice'.")
-      }
     } else {
-      # 有多条记录
       if (is.null(dr_choice)) {
         if (interactive()) {
-          # 创建清晰的菜单项
           labels <- paste0(
             "[", seq_len(nrow(rec)), "] ",
             rec$model,
@@ -64,63 +85,135 @@ new_scenario <- function(pathogen_name = NULL,
             )
           )
           cat("\nMultiple parameter sets found for '", pathogen_id, "':\n", sep="")
-          cat("Choose a number and press Enter (0 to abort):\n")
           choice_idx <- menu(labels, title = "Select a parameter set by number:")
-          if (choice_idx == 0) {
-            stop("Selection aborted by user.")
-          }
+          if (choice_idx == 0) stop("Selection aborted by user.")
           chosen <- choice_idx
         } else {
-          # 非交互环境：报错并列出选项
-          msg <- paste0(
-            "Multiple parameter sets found for '", pathogen_id, "'. ",
-            "Please specify 'dr_choice' as an integer (1-", nrow(rec), ") or model type.\n",
-            "Available options:\n",
-            paste(capture.output(print(rec[, c("model","alpha","beta","N50","k")])), collapse="\n")
-          )
+          msg <- paste0("Multiple parameter sets found for '", pathogen_id, "'. ",
+                        "Please specify 'dr_choice' as an integer or model type.\nAvailable options:\n",
+                        paste(capture.output(print(rec[, c("model","alpha","beta","N50","k")])), collapse="\n"))
           stop(msg)
         }
       } else {
-        # dr_choice 已提供
         if (is.numeric(dr_choice)) {
           idx <- as.integer(dr_choice)
-          if (idx < 1 || idx > nrow(rec)) {
-            stop("'dr_choice' must be between 1 and ", nrow(rec), ".")
-          }
+          if (idx < 1 || idx > nrow(rec)) stop("'dr_choice' out of range.")
           chosen <- idx
         } else if (is.character(dr_choice)) {
-          # 按模型名匹配，取第一个匹配的
           model_match <- which(tolower(rec$model) == tolower(dr_choice))
-          if (length(model_match) == 0) {
-            stop("No record with model '", dr_choice, "'. Available models: ",
-                 paste(unique(rec$model), collapse=", "))
-          }
+          if (length(model_match) == 0) stop("Model '", dr_choice, "' not found.")
           chosen <- model_match[1]
         } else {
-          stop("'dr_choice' must be an integer index or a model name (e.g., 'exponential').")
+          stop("'dr_choice' must be integer or character.")
         }
       }
     }
-
-    # --- 从选定的行构建 dr_pars ---
     chosen_row <- rec[chosen, ]
     model <- chosen_row$model
     dr_pars <- list(type = model)
-
     if (model == "exponential") {
-      if (is.na(chosen_row$k)) stop("Parameter 'k' is missing in the database for this record.")
+      if (is.na(chosen_row$k)) stop("Parameter 'k' is missing.")
       dr_pars$k <- chosen_row$k
     } else if (model == "exact_beta_poisson") {
       if (is.na(chosen_row$alpha) || is.na(chosen_row$beta))
-        stop("Parameters 'alpha' or 'beta' are missing in the database for this record.")
+        stop("Parameters 'alpha' or 'beta' missing.")
       dr_pars$alpha <- chosen_row$alpha
       dr_pars$beta  <- chosen_row$beta
     } else {
-      stop("Unknown model type in database: ", model)
+      stop("Unknown model type: ", model)
     }
   }
 
-  # --- 处理场景名称 ---
+  # ---------- 暴露参数自动加载 ----------
+  user_IR <- !is.null(IR_dist)
+  user_t  <- !is.null(t_exp)
+
+  if (!is.null(exposure_group)) {
+    # 1. 呼吸速率（长期，m³/d → m³/h）
+    if (!user_IR) {
+      ir_info <- get_ir_long(exposure_group, fallback = fallback)
+      if (!is.null(ir_info)) {
+        IR_dist <- function(n) stats::rlnorm(n,
+                                             meanlog = ir_info$log_mean - log(24),
+                                             sdlog   = ir_info$log_sd)
+        message("IR_dist set from database for group '", exposure_group,
+                "' (converted to m³/h).")
+      }
+    }
+
+    # 2. 暴露时间
+    if (!user_t) {
+      if (!is.null(activity_template) && !is.null(activity_intensity)) {
+        # 使用活动模板固定时长
+        budget <- get_activity_budget(activity_template)
+        act_min <- budget$minutes[activity_intensity]
+        if (is.na(act_min)) {
+          stop("Activity intensity '", activity_intensity, "' not in template '", activity_template, "'.")
+        }
+        t_exp <- act_min / 60   # 转为小时
+        message("Exposure duration set to ", t_exp, " hours (from template '",
+                activity_template, "', intensity '", activity_intensity, "').")
+      } else {
+        # 使用时间活动模式数据库（室内/室外，分钟分布）
+        time_info <- get_time(exposure_group, microenvironment, season, fallback = fallback)
+        if (!is.null(time_info)) {
+          # 分钟 → 小时
+          t_exp <- function(n) stats::rlnorm(n,
+                                             meanlog = time_info$log_mean - log(60),
+                                             sdlog   = time_info$log_sd)
+          message("Exposure duration distribution set from time-activity database for group '",
+                  exposure_group, "', microenvironment '", microenvironment,
+                  "', season '", season, "'.")
+        }
+      }
+    }
+  }
+
+  # ---------- 存活率加载 ----------
+  if (is.null(survival)) {
+    surv_rec <- get_survival(pathogen_id)
+    survival_dist <- switch(surv_rec$dist,
+                            lognormal = function(n) stats::rlnorm(n,
+                                                                  meanlog = surv_rec$log_mean,
+                                                                  sdlog   = surv_rec$log_sd),
+                            constant  = function(n) rep(surv_rec$value, n),
+                            stop("Unsupported survival distribution: ", surv_rec$dist)
+    )
+    message("Survival distribution loaded from database.")
+  } else if (is.function(survival)) {
+    survival_dist <- survival
+  } else {
+    survival_dist <- function(n) rep(survival, n)
+  }
+
+  # ---------- 沉积率加载 ----------
+  if (is.null(deposition)) {
+    dep_rec <- get_deposition(population_deposition, site = "PUL")
+    if (!is.null(dep_rec)) {
+      deposition_dist <- switch(dep_rec$dist,
+                                lognormal = function(n) stats::rlnorm(n,
+                                                                      meanlog = dep_rec$log_mean,
+                                                                      sdlog   = dep_rec$log_sd),
+                                stop("Unsupported deposition distribution: ", dep_rec$dist)
+      )
+      message("Deposition distribution loaded for population '", population_deposition, "'.")
+    } else {
+      deposition_dist <- function(n) rep(0.5, n)  # 安全回退
+    }
+  } else if (is.function(deposition)) {
+    deposition_dist <- deposition
+  } else {
+    deposition_dist <- function(n) rep(deposition, n)
+  }
+
+  # ---------- AG 固定为 1（默认不额外乘）----------
+  if (is.function(AG)) {
+    AG_dist <- AG
+  } else {
+    AG_dist <- function(n) rep(AG, n)
+  }
+
+  # ---------- 场景命名 ----------
   if (is.null(pathogen_name)) {
     if (!is.null(pathogen_id)) {
       pathogen_name <- pathogen_id
@@ -129,20 +222,29 @@ new_scenario <- function(pathogen_name = NULL,
     }
   }
 
-  # --- 构建场景对象 ---
+  # ---------- 设置最终默认值 ----------
+  if (is.null(IR_dist)) {
+    IR_dist <- function(n) stats::rnorm(n, mean = 0.7, sd = 0.1)
+  }
+  if (is.null(t_exp)) {
+    t_exp <- 1.0
+  }
+
+  # ---------- 构建场景对象 ----------
   scenario <- list(
-    pathogen     = pathogen_name,
-    pathogen_id  = pathogen_id,
-    C_air_dist   = C_air_dist,
-    IR_dist      = IR_dist,
-    t_exp_dist   = if (is.function(t_exp)) t_exp else function(n) rep(t_exp, n),
-    dr_pars      = dr_pars
+    pathogen         = pathogen_name,
+    pathogen_id      = pathogen_id,
+    C_air_dist       = C_air_dist,
+    IR_dist          = IR_dist,
+    t_exp_dist       = if (is.function(t_exp)) t_exp else function(n) rep(t_exp, n),
+    AG_dist          = AG_dist,
+    deposition_dist  = deposition_dist,
+    survival_dist    = survival_dist,
+    dr_pars          = dr_pars
   )
   class(scenario) <- c("airqmra_scenario", "list")
   scenario
 }
-
-
 
 
 #' Run 1D Monte Carlo QMRA simulation
@@ -157,8 +259,11 @@ run_qmra_1d <- function(scenario, n_iter = 1e5) {
   IR  <- scenario$IR_dist(n_iter)
   t   <- scenario$t_exp_dist(n_iter)
 
-  # Calculate inhaled dose
-  dose <- C * IR * t
+  # Calculate effective dose (viable, deposited, and invasion-adjusted)
+  dose <- C * IR * t *
+    scenario$survival_dist(n_iter) *
+    scenario$deposition_dist(n_iter) *
+    scenario$AG_dist(n_iter)
 
   # Extract dose-response type and parameters
   dr  <- scenario$dr_pars

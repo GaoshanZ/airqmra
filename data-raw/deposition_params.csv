@@ -1,0 +1,17 @@
+﻿Population,site,dist,log_mean,log_sd,Deposition Site
+Male,ET,lognormal,-0.584,0.0344,Extra-thoracic 
+Male,TB,lognormal,-2.749,0.0101,Tracheobronchial 
+Male,PUL,lognormal,-1.94,0.0068,Pulmonary
+Male,TD,lognormal,-0.276,0.0257,Total Deposition
+Female,ET,lognormal,-0.758,0.0402,Extra-thoracic 
+Female,TB,lognormal,-2.616,0.0137,Tracheobronchial 
+Female,PUL,lognormal,-1.588,0.0278,Pulmonary
+Female,TD,lognormal,-0.297,0.0269,Total Deposition
+Child,ET,lognormal,-0.522,0.0278,Extra-thoracic 
+Child,TB,lognormal,-2.668,0.0296,Tracheobronchial 
+Child,PUL,lognormal,-1.658,0.0914,Pulmonary 
+Child,TD,lognormal,-0.161,0.0187,Total Deposition
+Senior,ET,lognormal,-0.67,0.0376,Extra-thoracic 
+Senior,TB,lognormal,-2.764,0.0146,Tracheobronchial 
+Senior,PUL,lognormal,-2.056,0.117,Pulmonary
+Senior,TD,lognormal,-0.354,0.0314,Total Deposition

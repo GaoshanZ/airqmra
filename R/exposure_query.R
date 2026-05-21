@@ -134,3 +134,47 @@ get_time <- function(group, microenvironment = "Indoor", season = "Annual",
     ref      = rec$ref
   )
 }
+
+#' Get survival fraction distribution
+#'
+#' @param pathogen_id Character or NULL. Pathogen ID for specific survival data.
+#'   If NULL, returns the default (all-pathogen) survival distribution.
+#'
+#' @return A list with dist, log_mean, log_sd, value, ref.
+#' @export
+get_survival <- function(pathogen_id = NULL) {
+  db <- airqmra::survival_db
+
+  # 优先匹配指定病原体
+  if (!is.null(pathogen_id)) {
+    rec <- db[!is.na(db$pathogen_id) & db$pathogen_id == pathogen_id, ]
+    if (nrow(rec) > 0) return(as.list(rec[1, ]))
+  }
+
+  # 回退到通用值（pathogen_id 为 NA）
+  rec <- db[is.na(db$pathogen_id), ]
+  if (nrow(rec) == 0) stop("No default survival parameters found in database.")
+  as.list(rec[1, ])
+}
+
+#' Get pulmonary deposition fraction for a population group
+#'
+#' @param population Character. "Male", "Female", "Child", "Senior".
+#' @param site Character. Deposition site code, default "PUL".
+#'
+#' @return A list with dist, log_mean, log_sd, deposition_site.
+#' @export
+get_deposition <- function(population = "Male", site = "PUL") {
+  db <- airqmra::deposition_db
+  rec <- db[db$population == population & db$site == site, ]
+  if (nrow(rec) == 0) {
+    warning("No deposition data for population '", population, "', site '", site, "'.")
+    return(NULL)
+  }
+  list(
+    dist      = rec$dist,
+    log_mean  = rec$log_mean,
+    log_sd    = rec$log_sd,
+    deposition_site = rec$deposition_site
+  )
+}

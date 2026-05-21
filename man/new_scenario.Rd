@@ -8,35 +8,75 @@ new_scenario(
   pathogen_name = NULL,
   pathogen_id = NULL,
   C_air_dist = function(n) stats::rlnorm(n, meanlog = log(50), sdlog = log(1.8)),
-  IR_dist = function(n) stats::rnorm(n, mean = 0.7, sd = 0.1),
-  t_exp = 1,
+  IR_dist = NULL,
+  t_exp = NULL,
   dr_pars = NULL,
-  dr_choice = NULL
+  dr_choice = NULL,
+  exposure_group = NULL,
+  microenvironment = "Indoor",
+  season = "Annual",
+  activity_template = NULL,
+  activity_intensity = NULL,
+  AG = 1,
+  deposition = NULL,
+  survival = NULL,
+  population_deposition = "Male",
+  fallback = c("Adult")
 )
 }
 \arguments{
-\item{pathogen_name}{Character. A descriptive name for the scenario. If not provided but
-\code{pathogen_id} is given, \code{pathogen_id} will be used as the name.}
+\item{pathogen_name}{Character. A descriptive name for the scenario.
+If not provided, \code{pathogen_id} or a generic name will be used.}
 
-\item{pathogen_id}{Character. English ID of the pathogen as in the built-in database
-(e.g., "legionella pneumophila", "escherichia coli"). If provided and \code{dr_pars} is NULL,
-dose-response parameters will be loaded automatically from the database.}
+\item{pathogen_id}{Character. English ID of the pathogen as in the built-in database.
+If \code{dr_pars} is NULL, dose-response parameters will be loaded from the database.}
 
-\item{C_air_dist}{Function. A function that generates air concentration samples (copies/m³).}
+\item{C_air_dist}{Function. A function that generates air concentration samples (copies/m³).
+Defaults to a lognormal distribution with GM=50, GSD=1.8.}
 
-\item{IR_dist}{Function. A function that generates inhalation rate samples (m³/h).}
+\item{IR_dist}{Function. A function that generates inhalation rate samples (m³/h).
+If not provided manually and \code{exposure_group} is given, it will be loaded automatically
+from the built-in exposure database (converted from m³/d to m³/h).}
 
-\item{t_exp}{Single numeric or function for exposure duration (hours).}
+\item{t_exp}{Single numeric or function for exposure duration (hours).
+If not provided manually and \code{exposure_group} is given, it will be loaded automatically
+from the time-activity database (converted from min/d to hours) or from an activity template.}
 
 \item{dr_pars}{List. Dose-response parameters (e.g., \code{list(type = "exponential", k = 0.0054)}).
-If \code{NULL}, the function will load parameters from the built-in database using \code{pathogen_id}.}
+If NULL, parameters will be loaded from the pathogen database using \code{pathogen_id}.}
 
-\item{dr_choice}{Integer or character. Choice of which parameter set to use when the pathogen
-has multiple records in the database. An integer selects the row number (from the
-\code{pathogen_info()} result); a character string can be \code{"exponential"} or
-\code{"exact_beta_poisson"} to select the first record of that model type. If \code{NULL} and
-multiple records exist, the function will ask interactively in an R session, or raise an
-error in non-interactive scripts.}
+\item{dr_choice}{Integer or character. Choice of parameter set when multiple records exist.}
+
+\item{exposure_group}{Character. Population classification for exposure parameters
+(e.g., "Adult", "Male", "18Y-44Y"). If provided, \code{IR_dist} and \code{t_exp} will be
+overwritten with database values unless manually specified.}
+
+\item{microenvironment}{Character. "Indoor" or "Outdoor". Default "Indoor".}
+
+\item{season}{Character. "Annual", "Spring & Autumn", "Summer", "Winter". Default "Annual".}
+
+\item{activity_template}{Character. Activity template ID (e.g., "office_worker").
+If provided together with \code{activity_intensity}, the exposure duration will be set to
+the fixed minutes of that intensity from the template (converted to hours).}
+
+\item{activity_intensity}{Character. Activity intensity (e.g., "Light_intensity").
+Used with \code{activity_template} to set a fixed exposure duration.}
+
+\item{AG}{Numeric or function. Fraction of deposited pathogens that initiate infection.
+Default is 1 (no additional reduction). Accepts a fixed value or a distribution function.}
+
+\item{deposition}{Numeric or function. Fraction of inhaled particles that deposit in the lung.
+If NULL (default), loaded automatically from the deposition database based on
+\code{population_deposition} (site "PUL").}
+
+\item{survival}{Numeric or function. Fraction of airborne pathogens that remain viable upon inhalation.
+If NULL (default), loaded automatically from the survival database.}
+
+\item{population_deposition}{Character. Population group for deposition data lookup.
+One of "Male", "Female", "Child", "Senior". Default "Male".}
+
+\item{fallback}{Character vector. Fallback classifications for exposure data,
+in priority order. Default \code{c("Adult")}.}
 }
 \value{
 An object of class \code{airqmra_scenario}.
