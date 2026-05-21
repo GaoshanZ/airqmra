@@ -1,24 +1,16 @@
-"pathogen_id","pathogen_cn","model","alpha","beta","N50","k","primer_F","primer_R"
-"aspergillus fumigatus","烟曲霉菌","exact_beta_poisson",1.1,20,NA,NA,NA,NA
-"campylobacter jejuni","空肠弯曲杆菌","exact_beta_poisson",0.151,17.3276933882124,1690,NA,"CTGGTGGTTTTGAAGCAAAGATT","CAATACCAGTGTCTAAAGTGCGTTTAT"
-"campylobacter jejuni","空肠弯曲杆菌","exact_beta_poisson",0.145,7.59,NA,NA,NA,NA
-"campylobacter spp.","弯曲杆菌属","exact_beta_poisson",0.145,7.58402240436235,896,NA,"CACGTGCTACAATGGCATAT","GGCTTCATGCTCTCGAGTT"
-"enterococcus spp.","肠球菌","exponential",NA,NA,NA,1.31e-07,"AGAAATTCCAAACGAACTTG","CAGTGCTCTACCTCCATCATT"
-"enterotoxigenic escherichia coli","产肠毒素大肠杆菌","exact_beta_poisson",0.178,1787528.90612545,8.6e+07,NA,"TCCTGAAAGCATGAATAGTAGCAATTAC","TTAATAGCACCCGGTACAAGCA"
-"escherichia coli","大肠杆菌","exact_beta_poisson",0.248,48.7905604110046,749.51,NA,"GGTAGAGCACTGTTTTGGCA","TGTCTCCCGTGATAACTTTCTC"
-"escherichia coli","大肠杆菌","exact_beta_poisson",0.155,2110000,NA,NA,NA,NA
-"escherichia coli","大肠杆菌","exponential",NA,NA,NA,1.22e-08,NA,NA
-"escherichia coli o157:h7","大肠杆菌O157:H7","exact_beta_poisson",0.248,48.8,NA,NA,NA,NA
-"escherichia coli o157:h7","大肠杆菌O157:H7","exact_beta_poisson",0.209,42.1630637386922,1120,NA,"TTTCACACTTATTGGATGGTCTCAA","CGATGAGTTTATCTGCAAGGTGAT"
-"legionella pneumophila","嗜肺军团菌","exponential",NA,NA,NA,0.06,NA,NA
-"nontyphoidal salmonella","非伤寒沙门氏菌","exact_beta_poisson",0.3126,2886.29743553425,23618.77,NA,"CTCACCAGGAGATTACAACATGG","AGCTCAGACCAAAAGTGACCATC"
-"nontyphoidal salmonella","非伤寒沙门氏菌","exact_beta_poisson",0.3126,2884,NA,NA,"CTCACCAGGAGATTACAACATGG","AGCTCAGACCAAAAGTGACCATC"
-"pseudomonas aeruginosa","绿脓杆菌","exact_beta_poisson",0.19,494.608936024612,18500,NA,"AGATGGGCGACGAGTTGCTG","GACTGATGACCGTGGGCTTGAT"
-"pseudomonas aeruginosa","铜绿假单胞菌","exact_beta_poisson",0.19,494.608936024612,18500,NA,"AGATGGGCGACGAGTTGCTG","GACTGATGACCGTGGGCTTGAT"
-"shigella flexneri","福氏志贺氏菌","exact_beta_poisson",0.265,116.755159176693,1480,NA,"ACCATGCTCGCAGAGAAACT","TACGCTTCAGTACAGCATGC"
-"shigella spp.","志贺氏杆菌","exact_beta_poisson",0.265,116.755159176693,1480,NA,NA,NA
-"staphylococcus aureus","金黄色葡萄球菌","exponential",NA,NA,NA,7.64e-08,NA,NA
-"staphylococcus aureus","金黄色葡萄球菌","exponential",NA,NA,NA,8.05e-08,NA,NA
-"staphylococcus aureus","金黄色葡萄球菌","exponential",NA,NA,NA,8.05e-08,"TCGCTTGCTATGATTGTGG","ACATACGCCAATGTTCTACC"
-"staphylococcus aureus","金黄色葡萄球菌","exponential",NA,NA,NA,6.46e-08,NA,NA
-"staphylococcus aureus","金黄色葡萄球菌","exponential",NA,NA,NA,1e-07,NA,NA
+﻿pathogen_id,pathogen_cn,dose_response_model,alpha,beta,N50,k,dist,alpha_log_mean,alpha_log_sd,beta_log_mean,beta_log_sd,N50_log_mean,N50_log_sd,k_log_mean,k_log_sd,dose_unit,inhalation_exposure,dermal_contact,ingestion_exposure,response_type,human-to-human transmission,ref
+aspergillus fumigatus,烟曲霉菌,beta-Poisson,9.00E-02,14,3.20E+04,NA,lognormal,-2.4079,0.113,2.6391,0.51,10.3776,NA,NA,NA,CFU,Y,Y,N,Infection,N,"Leleu, C., Menotti, J., Meneceur, P., Choukri, F., Sulahian, A., Garin, Y. J. F., ... & Derouin, F. (2013). Bayesian development of a dose‐response model for Aspergillus fumigatus and invasive aspergillosis. Risk analysis, 33(8), 1441-1453."
+campylobacter jejuni,空肠弯曲杆菌,beta-Poisson,1.17E-01,NA,3.14E+04,NA,lognormal,-2.142,0.742,NA,NA,10.358,1.892,NA,NA,CFU,N,N,Y,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+escherichia coli,大肠杆菌,beta-Poisson,1.78E-01,NA,8.60E+07,1.95E-06,lognormal,-1.725,0.33,NA,NA,18.27,0.575,-13.14,0.315,CFU,Y,Y,Y,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+legionella pneumophila,嗜肺军团菌,exponential,NA,NA,NA,4.99E-05,lognormal,NA,NA,NA,NA,NA,NA,-9.905,0.176,CFU,Y,N,N,Infection,N,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+pseudomonas aeruginosa,铜绿假单胞菌,beta-Poisson,0.19,NA,1.85E+04,8.80E-08,lognormal,-1.6607,0.512,NA,NA,9.825,0.745,-16.245,0.536,CFU,Y,Y,Y,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+shigella flexneri,福氏志贺氏菌,beta-Poisson,0.117,NA,3.64E+03,NA,lognormal,-2.146,0.415,NA,NA,8.199,0.628,NA,NA,CFU,Y,Y,Y,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+staphylococcus aureus,金黄色葡萄球菌,exponential,NA,NA,NA,7.64E-08,lognormal,NA,NA,NA,NA,NA,NA,-16.38,0.165,CFU,Y,Y,Y,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+Adenovirus,腺病毒,exponential,NA,NA,NA,6.07E-01,lognormal,NA,NA,NA,NA,NA,NA,−0.498,0.537,TCID50,Y,Y,Y,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+Acanthamoeba,棘阿米巴,exponential,NA,NA,NA,1.01E-04,lognormal,NA,NA,NA,NA,NA,NA,-9.2,0.5,NA,Y,Y,Y,Infection,N,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+Bacillus anthracis,炭疽芽孢杆菌,exponential,0.549,NA,2.85E+04,7.16E-06,lognormal,-0.6,2.3,NA,NA,10.26,0.47,-11.85,0.14,spores,Y,Y,Y,Infection,N,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+Francisella tularensis,土拉弗朗西斯菌,exponential,NA,NA,NA,4.73E-02,lognormal,NA,NA,NA,NA,NA,NA,-3.051,0.307,CFU,Y,Y,Y,Infection,N,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+Influenza,流感病毒,beta-Poisson,0.581,NA,9.45E+05,NA,lognormal,-0.543,0.237,NA,NA,13.762,0.305,NA,NA,TCID50,Y,Y,N,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+Rhinovirus,鼻病毒,beta-Poisson,0.182,NA,13.8,NA,lognormal,-1.702,0.308,NA,NA,2.62,0.512,NA,NA,TCID50,Y,Y,N,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+SARS,SARS 冠状病毒,exponential,NA,NA,NA,2.46E-03,lognormal,NA,NA,NA,NA,NA,NA,-6.01,0.365,PFU,Y,Y,Y,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle
+Yersinia pestis,鼠疫耶尔森菌,exponential,NA,NA,NA,1.07E-04,lognormal,NA,NA,NA,NA,NA,NA,-9.143,0.396,CFU,Y,Y,N,Infection,Y,QMRA Wiki. (n.d.). Burkholderia mallei. https://qmrawiki.msu.edu/pathogens/burkholderia-malle

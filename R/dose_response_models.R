@@ -42,21 +42,42 @@ exact_beta_poisson <- function(dose, alpha, beta) {
 }
 
 
+#' Approximate beta-Poisson dose-response model (N50-based)
+#'
+#' Computes infection probability using the approximate beta-Poisson formula:
+#' \deqn{P = 1 - \left(1 + \text{dose} \cdot \frac{2^{1/\alpha} - 1}{N_{50}}\right)^{-\alpha}}
+#'
+#' @param dose Numeric vector of dose.
+#' @param alpha Non-negative shape parameter.
+#' @param N50 Numeric vector of N50 values (dose at which 50% respond).
+#'
+#' @return Numeric vector of infection probabilities (0–1).
+#' @examples
+#' approx_beta_poisson(dose = c(1, 10, 100), alpha = 0.17, N50 = 8.6e7)
+#' @export
+approx_beta_poisson <- function(dose, alpha, N50) {
+  1 - (1 + dose * ((2^(1/alpha) - 1) / N50))^(-alpha)
+}
+
+
 #' Dose-response model dispatcher
 #'
 #' Selects the appropriate dose-response model based on the type specified.
 #' Currently supports:
-#'   - `"exponential"`: P = 1 - exp(-k * dose)
-#'   - `"exact_beta_poisson"`: P = 1 - 1F1(alpha, alpha + beta, -dose)
+#'   - `"exponential"`: \eqn{P = 1 - \exp(-k \cdot \text{dose})}
+#'   - `"exact_beta_poisson"`: exact beta-Poisson via confluent hypergeometric function
+#'   - `"approx_beta_poisson"`: approximate beta-Poisson using the N50-based formula
 #'
 #' @param dose Numeric vector of dose.
-#' @param type Character. One of "exponential" or "exact_beta_poisson".
+#' @param type Character. One of `"exponential"`, `"exact_beta_poisson"`, or
+#'   `"approx_beta_poisson"`.
 #' @param ... Additional parameters passed to the underlying model
-#'   (e.g., `k` for exponential, `alpha` and `beta` for exact_beta_poisson).
+#'   (e.g., `k` for exponential, `alpha` and `beta` for exact beta-Poisson,
+#'   `alpha` and `N50` for approximate beta-Poisson).
 #'
 #' @return Numeric vector of infection probabilities.
 #' @export
-dose_response <- function(dose, type = c("exponential", "exact_beta_poisson"), ...) {
+dose_response <- function(dose, type = c("exponential", "exact_beta_poisson", "approx_beta_poisson"), ...) {
   type <- match.arg(type)
   switch(type,
          exponential = {
@@ -72,6 +93,14 @@ dose_response <- function(dose, type = c("exponential", "exact_beta_poisson"), .
            if (is.null(alpha) || is.null(beta))
              stop("Parameters 'alpha' and 'beta' are required for exact beta-Poisson.")
            exact_beta_poisson(dose, alpha, beta)
+         },
+         approx_beta_poisson = {
+           args <- list(...)
+           alpha <- args$alpha
+           N50   <- args$N50
+           if (is.null(alpha) || is.null(N50))
+             stop("Parameters 'alpha' and 'N50' are required for approximate beta-Poisson.")
+           approx_beta_poisson(dose, alpha, N50)
          }
   )
 }

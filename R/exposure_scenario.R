@@ -14,6 +14,7 @@
 #'   from the time-activity database (converted from min/d to hours) or from an activity template.
 #' @param dr_pars List. Dose-response parameters (e.g., `list(type = "exponential", k = 0.0054)`).
 #'   If NULL, parameters will be loaded from the pathogen database using `pathogen_id`.
+#'   Ignored when `use_uncertainty = TRUE` (the parameter generator takes over).
 #' @param dr_choice Integer or character. Choice of parameter set when multiple records exist.
 #' @param exposure_group Character. Population classification for exposure parameters
 #'   (e.g., "Adult", "Male", "18Y-44Y"). If provided, `IR_dist` and `t_exp` will be
@@ -34,6 +35,9 @@
 #'   If NULL (default), loaded automatically from the survival database.
 #' @param population_deposition Character. Population group for deposition data lookup.
 #'   One of "Male", "Female", "Child", "Senior". Default "Male".
+#' @param use_uncertainty Logical. If TRUE, dose-response parameters (α, β, N₅₀, k) are sampled
+#'   from their uncertainty distributions (log‑normal) stored in the pathogen database.
+#'   If FALSE (default), point estimates are used.
 #' @param fallback Character vector. Fallback classifications for exposure data,
 #'   in priority order. Default `c("Adult")`.
 #'
@@ -55,6 +59,7 @@ new_scenario <- function(pathogen_name = NULL,
                          deposition    = NULL,
                          survival      = NULL,
                          population_deposition = "Male",
+                         use_uncertainty = FALSE,
                          fallback      = c("Adult")) {
 
   # ---------- 剂量反应参数处理 ----------
@@ -110,17 +115,31 @@ new_scenario <- function(pathogen_name = NULL,
     }
     chosen_row <- rec[chosen, ]
     model <- chosen_row$model
-    dr_pars <- list(type = model)
-    if (model == "exponential") {
-      if (is.na(chosen_row$k)) stop("Parameter 'k' is missing.")
-      dr_pars$k <- chosen_row$k
-    } else if (model == "exact_beta_poisson") {
-      if (is.na(chosen_row$alpha) || is.na(chosen_row$beta))
-        stop("Parameters 'alpha' or 'beta' missing.")
-      dr_pars$alpha <- chosen_row$alpha
-      dr_pars$beta  <- chosen_row$beta
+
+    # 根据是否启用不确定性构建参数
+    if (use_uncertainty) {
+      dr_generator <- build_dr_generator(chosen_row, use_uncertainty = TRUE)
+      dr_pars <- NULL   # 不确定性模式下不使用固定参数
     } else {
-      stop("Unknown model type: ", model)
+      dr_generator <- NULL
+      dr_pars <- list(type = model)
+      if (model == "exponential") {
+        if (is.na(chosen_row$k)) stop("Parameter 'k' is missing.")
+        dr_pars$k <- chosen_row$k
+      } else if (model == "exact_beta_poisson") {
+        if (!is.na(chosen_row$alpha) && !is.na(chosen_row$beta)) {
+          dr_pars$alpha <- chosen_row$alpha
+          dr_pars$beta  <- chosen_row$beta
+        } else if (!is.na(chosen_row$alpha) && !is.na(chosen_row$N50)) {
+          dr_pars$type <- "approx_beta_poisson"
+          dr_pars$alpha <- chosen_row$alpha
+          dr_pars$N50   <- chosen_row$N50
+        } else {
+          stop("Beta-Poisson model requires either 'beta' or 'N50' in the database.")
+        }
+      } else {
+        stop("Unknown model type: ", model)
+      }
     }
   }
 
@@ -240,7 +259,8 @@ new_scenario <- function(pathogen_name = NULL,
     AG_dist          = AG_dist,
     deposition_dist  = deposition_dist,
     survival_dist    = survival_dist,
-    dr_pars          = dr_pars
+    dr_pars          = dr_pars,
+    dr_generator     = dr_generator   # 不确定性参数生成器（可能为 NULL）
   )
   class(scenario) <- c("airqmra_scenario", "list")
   scenario
@@ -265,13 +285,20 @@ run_qmra_1d <- function(scenario, n_iter = 1e5) {
     scenario$deposition_dist(n_iter) *
     scenario$AG_dist(n_iter)
 
-  # Extract dose-response type and parameters
-  dr  <- scenario$dr_pars
-  type <- dr$type
-  dr_args <- dr[names(dr) != "type"]  # all parameters except 'type'
-
-  # Dispatch to dose_response
-  risk <- do.call(dose_response, c(list(dose = dose, type = type), dr_args))
+  # 获取剂量-反应参数（兼容点估计与不确定性生成器）
+  if (!is.null(scenario$dr_generator)) {
+    # 不确定性模式：生成器返回列表，包含 type 和参数向量
+    dr_params <- scenario$dr_generator(n_iter)
+    type <- dr_params$type
+    dr_args <- dr_params[names(dr_params) != "type"]
+    risk <- do.call(dose_response, c(list(dose = dose, type = type), dr_args))
+  } else {
+    # 点估计模式：使用场景中预先配置的固定参数列表
+    dr  <- scenario$dr_pars
+    type <- dr$type
+    dr_args <- dr[names(dr) != "type"]
+    risk <- do.call(dose_response, c(list(dose = dose, type = type), dr_args))
+  }
 
   class(risk) <- c("airqmra_result", "numeric")
   risk

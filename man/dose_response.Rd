@@ -4,15 +4,21 @@
 \alias{dose_response}
 \title{Dose-response model dispatcher}
 \usage{
-dose_response(dose, type = c("exponential", "exact_beta_poisson"), ...)
+dose_response(
+  dose,
+  type = c("exponential", "exact_beta_poisson", "approx_beta_poisson"),
+  ...
+)
 }
 \arguments{
 \item{dose}{Numeric vector of dose.}
 
-\item{type}{Character. One of "exponential" or "exact_beta_poisson".}
+\item{type}{Character. One of \code{"exponential"}, \code{"exact_beta_poisson"}, or
+\code{"approx_beta_poisson"}.}
 
 \item{...}{Additional parameters passed to the underlying model
-(e.g., \code{k} for exponential, \code{alpha} and \code{beta} for exact_beta_poisson).}
+(e.g., \code{k} for exponential, \code{alpha} and \code{beta} for exact beta-Poisson,
+\code{alpha} and \code{N50} for approximate beta-Poisson).}
 }
 \value{
 Numeric vector of infection probabilities.
@@ -21,7 +27,8 @@ Numeric vector of infection probabilities.
 Selects the appropriate dose-response model based on the type specified.
 Currently supports:
 \itemize{
-\item \code{"exponential"}: P = 1 - exp(-k * dose)
-\item \code{"exact_beta_poisson"}: P = 1 - 1F1(alpha, alpha + beta, -dose)
+\item \code{"exponential"}: \eqn{P = 1 - \exp(-k \cdot \text{dose})}
+\item \code{"exact_beta_poisson"}: exact beta-Poisson via confluent hypergeometric function
+\item \code{"approx_beta_poisson"}: approximate beta-Poisson using the N50-based formula
 }
 }

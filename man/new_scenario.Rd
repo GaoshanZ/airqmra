@@ -21,6 +21,7 @@ new_scenario(
   deposition = NULL,
   survival = NULL,
   population_deposition = "Male",
+  use_uncertainty = FALSE,
   fallback = c("Adult")
 )
 }
@@ -43,7 +44,8 @@ If not provided manually and \code{exposure_group} is given, it will be loaded a
 from the time-activity database (converted from min/d to hours) or from an activity template.}
 
 \item{dr_pars}{List. Dose-response parameters (e.g., \code{list(type = "exponential", k = 0.0054)}).
-If NULL, parameters will be loaded from the pathogen database using \code{pathogen_id}.}
+If NULL, parameters will be loaded from the pathogen database using \code{pathogen_id}.
+Ignored when \code{use_uncertainty = TRUE} (the parameter generator takes over).}
 
 \item{dr_choice}{Integer or character. Choice of parameter set when multiple records exist.}
 
@@ -74,6 +76,10 @@ If NULL (default), loaded automatically from the survival database.}
 
 \item{population_deposition}{Character. Population group for deposition data lookup.
 One of "Male", "Female", "Child", "Senior". Default "Male".}
+
+\item{use_uncertainty}{Logical. If TRUE, dose-response parameters (α, β, N₅₀, k) are sampled
+from their uncertainty distributions (log‑normal) stored in the pathogen database.
+If FALSE (default), point estimates are used.}
 
 \item{fallback}{Character vector. Fallback classifications for exposure data,
 in priority order. Default \code{c("Adult")}.}
