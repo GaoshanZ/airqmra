@@ -16,9 +16,9 @@
 #'   Default `c(0.025, 0.5, 0.975)`.
 #' @param frequency Optional. If provided, annual risk is also computed using
 #'   this frequency (passed to `annual_risk()`). Can be a fixed integer or a function.
-#' @param record_inputs Logical. If `TRUE`, all exposure variability samples
-#'   and dose‑response parameter values are recorded and returned (for global
-#'   sensitivity analysis). Default `FALSE`.
+#' @param record_inputs Logical. If `TRUE`, exposure variability matrices (C, IR, t,
+#'   survival, deposition) are also recorded and returned (for global sensitivity
+#'   analysis). Default `FALSE`.
 #'
 #' @return An object of class `airqmra_2d`, which is a list containing:
 #'   \item{risk_matrix}{Matrix of single-exposure risks (rows = variability, cols = uncertainty).}
@@ -26,11 +26,12 @@
 #'   \item{risk_quantiles}{Matrix of risk quantiles (rows = probs, columns = uncertainty iterations).}
 #'   \item{mean_risk}{Numeric vector of mean risk per uncertainty iteration.}
 #'   \item{summary}{Data frame with overall mean, median, and confidence limits of the mean risk.}
+#'   \item{param_list}{List (length = n_unc) of named vectors containing the dose‑response
+#'         parameter values actually used in each uncertainty iteration. Always returned.}
 #'   \item{annual_quantiles, annual_mean, annual_summary, overall_annual_risk}{If `frequency` is provided.}
 #'   \item{C_matrix, IR_matrix, t_matrix, survival_matrix, deposition_matrix}{If `record_inputs = TRUE`,
 #'         matrices of exposure inputs (rows = variability, cols = uncertainty).}
-#'   \item{param_list}{If `record_inputs = TRUE`, a list with length `n_unc`,
-#'         each element being a named vector of dose‑response parameters for that iteration.}
+#'   \item{annual_matrix}{If \code{frequency} is provided, matrix of annual risks (rows = variability, cols = uncertainty).}
 #' @export
 #'
 #' @examples
@@ -69,14 +70,25 @@ run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
     t_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
     survival_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
     deposition_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
-    param_list <- vector("list", n_unc)
   }
+
+  # 始终记录参数值（无论 record_inputs 如何）
+  param_list <- vector("list", n_unc)
 
   for (i in seq_len(n_unc)) {
     # 获取一组固定的剂量‑反应参数（标量）
     dr_params <- scenario$dr_generator(1)
     type <- dr_params$type
     dr_args_fixed <- dr_params[names(dr_params) != "type"]
+
+    # 保存参数值
+    if (type == "exponential") {
+      param_list[[i]] <- c(k = dr_args_fixed$k)
+    } else if (type == "exact_beta_poisson") {
+      param_list[[i]] <- c(alpha = dr_args_fixed$alpha, beta = dr_args_fixed$beta)
+    } else if (type == "approx_beta_poisson") {
+      param_list[[i]] <- c(alpha = dr_args_fixed$alpha, N50 = dr_args_fixed$N50)
+    }
 
     # 将参数固定到场景副本中
     scen_fixed <- scenario
@@ -105,21 +117,13 @@ run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
       annual_mean[i] <- mean(annual_risk_vec)
     }
 
-    # 记录输入变量（如需要）
+    # 记录输入变量（仅当 record_inputs = TRUE）
     if (record_inputs) {
       C_matrix[, i] <- C
       IR_matrix[, i] <- IR
       t_matrix[, i] <- t
       survival_matrix[, i] <- surv
       deposition_matrix[, i] <- depo
-      # 保存参数（统一为命名向量）
-      if (type == "exponential") {
-        param_list[[i]] <- c(k = dr_args_fixed$k)
-      } else if (type == "exact_beta_poisson") {
-        param_list[[i]] <- c(alpha = dr_args_fixed$alpha, beta = dr_args_fixed$beta)
-      } else if (type == "approx_beta_poisson") {
-        param_list[[i]] <- c(alpha = dr_args_fixed$alpha, N50 = dr_args_fixed$N50)
-      }
     }
   }
 
@@ -140,7 +144,8 @@ run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
       Median = median(mean_risk),
       CI_low = overall_ci[1],
       CI_high = overall_ci[2]
-    )
+    ),
+    param_list     = param_list   # 始终返回
   )
 
   if (!is.null(frequency)) {
@@ -148,6 +153,7 @@ run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
     annual_overall_mean <- mean(annual_mean)
     annual_overall_ci <- quantile(annual_mean, probs = c(probs[1], probs[length(probs)]), na.rm = TRUE)
     overall_annual_risk <- as.vector(annual_matrix)
+    res$annual_matrix <- annual_matrix
     res$annual_quantiles <- annual_quantiles
     res$annual_mean <- annual_mean
     res$annual_summary <- data.frame(
@@ -166,7 +172,6 @@ run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
     res$t_matrix <- t_matrix
     res$survival_matrix <- survival_matrix
     res$deposition_matrix <- deposition_matrix
-    res$param_list <- param_list
   }
 
   class(res) <- c("airqmra_2d", "list")
