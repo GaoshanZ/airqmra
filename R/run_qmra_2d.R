@@ -16,15 +16,21 @@
 #'   Default `c(0.025, 0.5, 0.975)`.
 #' @param frequency Optional. If provided, annual risk is also computed using
 #'   this frequency (passed to `annual_risk()`). Can be a fixed integer or a function.
+#' @param record_inputs Logical. If `TRUE`, all exposure variability samples
+#'   and dose‑response parameter values are recorded and returned (for global
+#'   sensitivity analysis). Default `FALSE`.
 #'
 #' @return An object of class `airqmra_2d`, which is a list containing:
 #'   \item{risk_matrix}{Matrix of single-exposure risks (rows = variability, cols = uncertainty).}
+#'   \item{overall_risk}{Numeric vector combining all variability and uncertainty samples.}
 #'   \item{risk_quantiles}{Matrix of risk quantiles (rows = probs, columns = uncertainty iterations).}
 #'   \item{mean_risk}{Numeric vector of mean risk per uncertainty iteration.}
 #'   \item{summary}{Data frame with overall mean, median, and confidence limits of the mean risk.}
-#'   \item{annual_quantiles}{If `frequency` is provided, annual risk quantiles matrix.}
-#'   \item{annual_mean}{If `frequency` is provided, vector of annual mean risk per iteration.}
-#'   \item{annual_summary}{If `frequency` is provided, data frame with annual mean, median, CI.}
+#'   \item{annual_quantiles, annual_mean, annual_summary, overall_annual_risk}{If `frequency` is provided.}
+#'   \item{C_matrix, IR_matrix, t_matrix, survival_matrix, deposition_matrix}{If `record_inputs = TRUE`,
+#'         matrices of exposure inputs (rows = variability, cols = uncertainty).}
+#'   \item{param_list}{If `record_inputs = TRUE`, a list with length `n_unc`,
+#'         each element being a named vector of dose‑response parameters for that iteration.}
 #' @export
 #'
 #' @examples
@@ -33,16 +39,21 @@
 #'                      use_uncertainty = TRUE)
 #' res2d <- run_qmra_2d(scen, n_var = 2000, n_unc = 500, frequency = 240)
 #' summary(res2d)
-#' plot(res2d)
+#' hist(res2d$overall_risk, main="Combined variability & uncertainty")
+#'
+#' # With global sensitivity inputs recorded
+#' res2d_global <- run_qmra_2d(scen, n_var = 500, n_unc = 200,
+#'                             frequency = NULL, record_inputs = TRUE)
 run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
                         probs = c(0.025, 0.5, 0.975),
-                        frequency = NULL) {
+                        frequency = NULL,
+                        record_inputs = FALSE) {
 
   if (is.null(scenario$dr_generator)) {
     stop("Scenario must be created with 'use_uncertainty = TRUE' to enable 2D simulation.")
   }
 
-  # 预分配矩阵
+  # 预分配输出矩阵
   risk_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
   mean_risk <- numeric(n_unc)
 
@@ -51,37 +62,77 @@ run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
     annual_mean <- numeric(n_unc)
   }
 
+  # 如果需要记录输入，预分配存储
+  if (record_inputs) {
+    C_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
+    IR_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
+    t_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
+    survival_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
+    deposition_matrix <- matrix(NA_real_, nrow = n_var, ncol = n_unc)
+    param_list <- vector("list", n_unc)
+  }
+
   for (i in seq_len(n_unc)) {
-    # 从生成器获取一组固定的剂量-反应参数（标量）
+    # 获取一组固定的剂量‑反应参数（标量）
     dr_params <- scenario$dr_generator(1)
     type <- dr_params$type
     dr_args_fixed <- dr_params[names(dr_params) != "type"]
 
-    # 构造一个临时的固定参数场景
+    # 将参数固定到场景副本中
     scen_fixed <- scenario
     scen_fixed$dr_pars <- c(list(type = type), dr_args_fixed)
     scen_fixed$dr_generator <- NULL
 
-    # 变异性模拟
-    single_risk <- run_qmra_1d(scen_fixed, n_iter = n_var)
+    # 生成当前迭代的所有暴露变异性样本
+    C <- scen_fixed$C_air_dist(n_var)
+    IR <- scen_fixed$IR_dist(n_var)
+    t <- scen_fixed$t_exp_dist(n_var)
+    surv <- scen_fixed$survival_dist(n_var)
+    depo <- scen_fixed$deposition_dist(n_var)
+    AG <- scen_fixed$AG_dist(n_var)
+
+    # 计算有效剂量和风险
+    dose <- C * IR * t * surv * depo * AG
+    single_risk <- do.call(dose_response, c(list(dose = dose, type = type), dr_args_fixed))
+
     risk_matrix[, i] <- single_risk
     mean_risk[i] <- mean(single_risk)
 
+    # 记录年风险（如需要）
     if (!is.null(frequency)) {
       annual_risk_vec <- annual_risk(single_risk, frequency = frequency)
       annual_matrix[, i] <- annual_risk_vec
       annual_mean[i] <- mean(annual_risk_vec)
     }
+
+    # 记录输入变量（如需要）
+    if (record_inputs) {
+      C_matrix[, i] <- C
+      IR_matrix[, i] <- IR
+      t_matrix[, i] <- t
+      survival_matrix[, i] <- surv
+      deposition_matrix[, i] <- depo
+      # 保存参数（统一为命名向量）
+      if (type == "exponential") {
+        param_list[[i]] <- c(k = dr_args_fixed$k)
+      } else if (type == "exact_beta_poisson") {
+        param_list[[i]] <- c(alpha = dr_args_fixed$alpha, beta = dr_args_fixed$beta)
+      } else if (type == "approx_beta_poisson") {
+        param_list[[i]] <- c(alpha = dr_args_fixed$alpha, N50 = dr_args_fixed$N50)
+      }
+    }
   }
 
-  # 计算风险分位数（每列一个不确定性样本）
-  risk_quantiles <- apply(risk_matrix, 2, quantile, probs = probs, na.rm = TRUE)
+  # 合并变异性和不确定性样本
+  overall_risk <- as.vector(risk_matrix)
 
+  risk_quantiles <- apply(risk_matrix, 2, quantile, probs = probs, na.rm = TRUE)
   overall_mean <- mean(mean_risk)
   overall_ci <- quantile(mean_risk, probs = c(probs[1], probs[length(probs)]), na.rm = TRUE)
 
   res <- list(
     risk_matrix    = risk_matrix,
+    overall_risk   = overall_risk,
     risk_quantiles = risk_quantiles,
     mean_risk      = mean_risk,
     summary        = data.frame(
@@ -96,6 +147,7 @@ run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
     annual_quantiles <- apply(annual_matrix, 2, quantile, probs = probs, na.rm = TRUE)
     annual_overall_mean <- mean(annual_mean)
     annual_overall_ci <- quantile(annual_mean, probs = c(probs[1], probs[length(probs)]), na.rm = TRUE)
+    overall_annual_risk <- as.vector(annual_matrix)
     res$annual_quantiles <- annual_quantiles
     res$annual_mean <- annual_mean
     res$annual_summary <- data.frame(
@@ -104,6 +156,17 @@ run_qmra_2d <- function(scenario, n_var = 5000, n_unc = 1000,
       CI_low = annual_overall_ci[1],
       CI_high = annual_overall_ci[2]
     )
+    res$overall_annual_risk <- overall_annual_risk
+  }
+
+  # 附加记录数据（如果开启）
+  if (record_inputs) {
+    res$C_matrix <- C_matrix
+    res$IR_matrix <- IR_matrix
+    res$t_matrix <- t_matrix
+    res$survival_matrix <- survival_matrix
+    res$deposition_matrix <- deposition_matrix
+    res$param_list <- param_list
   }
 
   class(res) <- c("airqmra_2d", "list")
@@ -116,6 +179,10 @@ summary.airqmra_2d <- function(object, ...) {
   cat("---------------------------\n")
   cat("Uncertainty iterations:", ncol(object$risk_matrix), "\n")
   cat("Variability iterations per U sample:", nrow(object$risk_matrix), "\n\n")
+
+  cat("Overall single-exposure risk (combined variability & uncertainty):\n")
+  print(summary(object$overall_risk))
+  cat("\n")
 
   cat("Single-Exposure Risk (mean across variability):\n")
   print(object$summary, row.names = FALSE)
@@ -130,6 +197,6 @@ summary.airqmra_2d <- function(object, ...) {
 
 #' @export
 plot.airqmra_2d <- function(x, ...) {
-  hist(x$mean_risk, main = "Uncertainty in Mean Risk",
-       xlab = "Mean infection risk per exposure", col = "lightblue")
+  hist(x$overall_risk, main = "Combined Variability & Uncertainty",
+       xlab = "Single-exposure infection risk", col = "lightblue")
 }
