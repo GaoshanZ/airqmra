@@ -17,8 +17,7 @@ ui <- navbarPage(
            sidebarLayout(
              sidebarPanel(
                selectInput("pathogen", "病原体", choices = pathogen_choices),
-               selectInput("exposure_group", "人群分组",
-                           choices = c("Adult", "Male", "Female", "18Y-44Y", "Urban", "Rural")),
+               selectInput("exposure_group", "人群分组", choices = NULL),
                selectInput("microenvironment", "微环境",
                            choices = c("Indoor", "Outdoor")),
                selectInput("season", "季节",
@@ -106,6 +105,13 @@ ui <- navbarPage(
 
 # Server
 server <- function(input, output, session) {
+
+  # 动态加载人群分组选项
+  observe({
+    # 从长期呼吸速率表中获取所有不重复的分类
+    all_groups <- sort(unique(airqmra::ir_long_table$classification))
+    updateSelectInput(session, "exposure_group", choices = all_groups)
+  })
 
   # 动态更新上传文件的列名选择
   observeEvent(input$conc_file, {
