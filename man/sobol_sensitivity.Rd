@@ -10,38 +10,47 @@ sobol_sensitivity(
   order = 2,
   nboot = 100,
   conf = 0.95,
-  frequency = NULL
+  frequency = NULL,
+  method = c("sobol2007", "sobol")
 )
 }
 \arguments{
-\item{scenario}{An \code{airqmra_scenario} object created with \code{use_uncertainty = FALSE}
-(point-estimate mode) or \code{use_uncertainty = TRUE} (uncertainty mode). The function
-will automatically extract the necessary information from the scenario.}
+\item{scenario}{An \code{airqmra_scenario} object created with
+\code{use_uncertainty = FALSE} (point-estimate mode) or \code{use_uncertainty = TRUE}
+(uncertainty mode).}
 
-\item{n}{Integer. Base sample size for Sobol' design. Total model evaluations
-will be \code{n * (p + 2)} where \code{p} is the total number of input variables.}
+\item{n}{Integer. Base sample size for the Sobol' design. Default 1000.}
 
-\item{order}{Integer. Order of Sobol' indices to compute (1 for first-order,
-2 for first + total, 3 for first + second + total). Default 2.}
+\item{order}{Integer. Order of Sobol' indices to compute when \code{method = "sobol"}
+(1 for first-order + total, 2 for first + second, 3 for first + second +
+third + total). Ignored when \code{method = "sobol2007"}. Default 2.}
 
 \item{nboot}{Integer. Number of bootstrap replicates for confidence intervals.}
 
 \item{conf}{Numeric. Confidence level for intervals (0-1). Default 0.95.}
 
 \item{frequency}{Optional. If provided, the model function returns annual risk
-instead of single-exposure risk (using \code{annual_risk()}). Can be a fixed integer
-or a function.}
+instead of single-exposure risk (using \code{annual_risk()}).}
+
+\item{method}{Character. Sobol' algorithm to use. \code{"sobol2007"} (default)
+computes first-order and total-effect indices directly and is recommended
+for most applications. \code{"sobol"} uses the older algorithm and allows
+specifying higher-order interactions via \code{order}.}
 }
 \value{
-An object of class \code{sobol} (from the \code{sensitivity} package) containing
-the estimated Sobol' indices and their bootstrap confidence intervals.
+An object of class \code{"sobol2007"} or \code{"sobol"} (from the \code{sensitivity}
+package) containing the estimated indices and bootstrap confidence intervals.
+When \code{method = "sobol2007"}, the object contains \verb{$S} (first-order) and \verb{$T}
+(total-effect) matrices. When \code{method = "sobol"}, the content depends on
+\code{order}.
 }
 \description{
-Performs a Sobol' sensitivity analysis on single-exposure (or annual) infection risk.
-The input variables include exposure factors (C, IR, t, survival, deposition) and,
-when available, the dose-response parameters (k for exponential; alpha and N50 for
-approximate beta-Poisson; alpha and beta for exact beta-Poisson) with their
-uncertainty distributions taken from the pathogen database.
+Performs a Sobol' sensitivity analysis on single-exposure (or annual) infection
+risk. The input variables include exposure factors (C, IR, t, survival,
+deposition) and, when available, the dose-response parameters (k for
+exponential; alpha and N50 for approximate beta-Poisson; alpha and beta for
+exact beta-Poisson) with their uncertainty distributions taken from the
+pathogen database.
 }
 \examples{
 # Legionella outdoor scenario with parameter uncertainty
@@ -50,7 +59,7 @@ scen <- new_scenario(pathogen_id = "legionella pneumophila",
                      microenvironment = "Outdoor",
                      population_deposition = "Male",
                      use_uncertainty = TRUE)
-sobol_res <- sobol_sensitivity(scen, n = 500, order = 2, nboot = 100)
+sobol_res <- sobol_sensitivity(scen, n = 500)
 print(sobol_res)
 plot(sobol_res)
 

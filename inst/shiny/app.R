@@ -1,103 +1,115 @@
 library(shiny)
 library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tibble)
 library(airqmra)
 
-# 病原体列表（从数据库中提取）
+# Pathogen list
 pathogen_choices <- unique(airqmra::pathogen_db$pathogen_id)
-names(pathogen_choices) <- paste0(airqmra::pathogen_db$pathogen_cn[match(pathogen_choices, airqmra::pathogen_db$pathogen_id)],
-                                  " (", pathogen_choices, ")")
+names(pathogen_choices) <- paste0(
+  airqmra::pathogen_db$pathogen_cn[match(pathogen_choices, airqmra::pathogen_db$pathogen_id)],
+  " (", pathogen_choices, ")"
+)
 
 # UI
 ui <- navbarPage(
-  title = "airqmra 吸入风险评估",
+  title = "airqmra Inhalation Risk Assessment",
   theme = shinythemes::shinytheme("flatly"),
 
-  # 选项卡1：场景设置
-  tabPanel("场景设置",
+  tabPanel("Scenario Settings",
            sidebarLayout(
              sidebarPanel(
-               selectInput("pathogen", "病原体", choices = pathogen_choices),
-               selectInput("exposure_group", "人群分组", choices = NULL),
-               selectInput("microenvironment", "微环境",
+               selectInput("pathogen", "Pathogen", choices = pathogen_choices),
+               selectInput("exposure_group", "Population Group", choices = NULL),
+               selectInput("microenvironment", "Microenvironment",
                            choices = c("Indoor", "Outdoor")),
-               selectInput("season", "季节",
+               selectInput("season", "Season",
                            choices = c("Annual", "Spring & Autumn", "Summer", "Winter")),
-               selectInput("population_deposition", "沉积参数人群",
+               selectInput("population_deposition", "Deposition Parameter Group",
                            choices = c("Male", "Female", "Child", "Senior")),
-               radioButtons("use_uncertainty", "剂量-反应参数不确定性",
-                            choices = c("点估计" = FALSE, "纳入不确定性" = TRUE),
+               radioButtons("use_uncertainty", "Dose‑Response Parameter Uncertainty",
+                            choices = c("Point Estimate" = FALSE, "Include Uncertainty" = TRUE),
                             selected = FALSE),
                hr(),
-               h5("暴露浓度 (copies/m³)"),
-               radioButtons("conc_type", "浓度类型",
-                            choices = c("默认对数正态" = "default",
-                                        "固定值" = "fixed",
-                                        "上传文件" = "file"),
+               h5("Air Concentration (copies/m³)"),
+               radioButtons("conc_type", "Concentration Type",
+                            choices = c("Default Lognormal" = "default",
+                                        "Fixed Value" = "fixed",
+                                        "Upload File" = "file"),
                             selected = "default"),
                conditionalPanel(
                  condition = "input.conc_type == 'fixed'",
-                 numericInput("conc_fixed", "固定浓度值", value = 50, min = 0)
+                 numericInput("conc_fixed", "Fixed Concentration", value = 50, min = 0)
                ),
                conditionalPanel(
                  condition = "input.conc_type == 'file'",
-                 fileInput("conc_file", "选择 CSV 文件",
+                 fileInput("conc_file", "Choose CSV File",
                            accept = c("text/csv", ".csv")),
-                 selectInput("conc_col", "浓度列名", choices = NULL),
-                 radioButtons("conc_method", "拟合方法",
-                              choices = c("经验分布" = "empirical",
-                                          "对数正态" = "lognormal",
-                                          "自动选择" = "auto"),
+                 selectInput("conc_col", "Concentration Column", choices = NULL),
+                 radioButtons("conc_method", "Fitting Method",
+                              choices = c("Empirical" = "empirical",
+                                          "Lognormal" = "lognormal",
+                                          "Auto Select" = "auto"),
                               selected = "lognormal")
                ),
                hr(),
-               h5("年暴露参数"),
-               radioButtons("annual_type", "年频率",
-                            choices = c("固定次数" = "fixed_freq", "泊松分布" = "poisson"),
+               h5("Annual Exposure Parameters"),
+               radioButtons("annual_type", "Annual Frequency",
+                            choices = c("Fixed Count" = "fixed_freq", "Poisson Distribution" = "poisson"),
                             selected = "fixed_freq"),
                conditionalPanel(
                  condition = "input.annual_type == 'fixed_freq'",
-                 numericInput("freq", "每年暴露次数", value = 20, min = 1)
+                 numericInput("freq", "Exposures per Year", value = 20, min = 1)
                ),
                conditionalPanel(
                  condition = "input.annual_type == 'poisson'",
-                 numericInput("lambda", "泊松均值", value = 20, min = 0)
+                 numericInput("lambda", "Poisson Mean", value = 20, min = 0)
                ),
                hr(),
-               actionButton("run1d", "运行一维模拟", icon = icon("play"), class = "btn-primary"),
+               h5("Simulation Settings"),
+               numericInput("n_iter", "1D Simulation Iterations", value = 5000, min = 1000, step = 1000),
+               numericInput("n_var", "2D - Variability Iterations (n_var)", value = 1000, min = 500, step = 500),
+               numericInput("n_unc", "2D - Uncertainty Iterations (n_unc)", value = 300, min = 100, step = 100),
+               hr(),
+               actionButton("run1d", "Run 1D Simulation", icon = icon("play"), class = "btn-primary"),
                br(), br(),
-               actionButton("run2d", "运行二维模拟", icon = icon("random"), class = "btn-success"),
+               actionButton("run2d", "Run 2D Simulation", icon = icon("random"), class = "btn-success"),
                br(), br(),
-               p("二维模拟较耗时，请耐心等待。")
+               p("2D simulation is time-consuming. Please be patient.")
              ),
              mainPanel(
-               h4("当前场景摘要"),
+               h4("Current Scenario Summary"),
                verbatimTextOutput("scenario_summary")
              )
            )
   ),
 
-  # 选项卡2：一维模拟结果
-  tabPanel("一维模拟",
+  tabPanel("1D Simulation",
            plotOutput("hist1d"),
            verbatimTextOutput("summary1d"),
-           h4("年风险"),
+           h4("Annual Risk"),
            plotOutput("annual_hist"),
            verbatimTextOutput("annual_summary")
   ),
 
-  # 选项卡3：二维模拟结果
-  tabPanel("二维模拟",
+  tabPanel("2D Simulation",
            plotOutput("hist2d_overall"),
            verbatimTextOutput("summary2d"),
-           h4("平均风险的不确定性分布"),
-           plotOutput("hist2d_mean")
+           h4("Uncertainty in Mean Risk"),
+           plotOutput("hist2d_mean"),
+           h4("Variability Distribution across Uncertainty Iterations"),
+           plotOutput("var_boxplot")
   ),
 
-  # 选项卡4：敏感性分析
-  tabPanel("敏感性分析",
-           h4("Spearman 飓风图（一维）"),
+  tabPanel("Sensitivity Analysis",
+           h4("Spearman Tornado Plot (1D)"),
            plotOutput("tornado1d"),
-           h4("Sobol' 方差分解（需先运行二维模拟）"),
+           h4("Sobol' Variance Decomposition (requires 2D simulation)"),
+           fluidRow(
+             column(4, numericInput("sobol_n", "Sobol' Sample Size (n)", value = 1000, min = 500, step = 500)),
+             column(4, numericInput("sobol_nboot", "Bootstrap Replicates", value = 100, min = 50, step = 50))
+           ),
            plotOutput("sobol_plot"),
            verbatimTextOutput("sobol_text")
   )
@@ -106,20 +118,19 @@ ui <- navbarPage(
 # Server
 server <- function(input, output, session) {
 
-  # 动态加载人群分组选项
+  # Dynamically load population groups
   observe({
-    # 从长期呼吸速率表中获取所有不重复的分类
     all_groups <- sort(unique(airqmra::ir_long_table$classification))
     updateSelectInput(session, "exposure_group", choices = all_groups)
   })
 
-  # 动态更新上传文件的列名选择
+  # Dynamically update column names of uploaded file
   observeEvent(input$conc_file, {
     header <- read.csv(input$conc_file$datapath, nrows = 0)
     updateSelectInput(session, "conc_col", choices = names(header))
   })
 
-  # 反应式：浓度分布函数
+  # Concentration distribution function
   conc_dist <- reactive({
     req(input$conc_type)
     if (input$conc_type == "default") {
@@ -135,7 +146,7 @@ server <- function(input, output, session) {
     }
   })
 
-  # 反应式：构建场景对象
+  # Build scenario
   build_scenario <- reactive({
     scen <- new_scenario(
       pathogen_id          = input$pathogen,
@@ -149,11 +160,10 @@ server <- function(input, output, session) {
     scen
   })
 
-  # 当前场景摘要
   output$scenario_summary <- renderPrint({
     scen <- build_scenario()
-    cat("病原体:", scen$pathogen, "\n")
-    cat("模型类型:", scen$dr_pars$type, "\n")
+    cat("Pathogen:", scen$pathogen, "\n")
+    cat("Model type:", scen$dr_pars$type, "\n")
     if (scen$dr_pars$type == "exponential") {
       cat("k =", signif(scen$dr_pars$k, 3), "\n")
     } else if (scen$dr_pars$type == "exact_beta_poisson") {
@@ -161,34 +171,33 @@ server <- function(input, output, session) {
     } else if (scen$dr_pars$type == "approx_beta_poisson") {
       cat("alpha =", scen$dr_pars$alpha, " N50 =", signif(scen$dr_pars$N50, 3), "\n")
     }
-    # 如果浓度来自文件，显示拟合信息
     if (input$conc_type == "file") {
-      cat("\n导入浓度分布信息:\n")
+      cat("\nImported concentration distribution info:\n")
       print(conc_dist())
     }
   })
 
-  # 一维模拟结果（反应式）
+  # 1D simulation
   res1d <- eventReactive(input$run1d, {
     scen <- build_scenario()
-    # 确保不确定性参数正确（场景中已经设置）
-    single <- run_qmra_1d(scen, n_iter = 5000)
-
-    # 确定频率
+    single <- run_qmra_1d(scen, n_iter = input$n_iter)
     if (input$annual_type == "fixed_freq") {
       freq <- input$freq
     } else {
       freq <- function(n) rpois(n, lambda = input$lambda)
     }
     annual <- annual_risk(single, frequency = freq)
-
     list(single = single, annual = annual, scen = scen)
   })
 
   output$hist1d <- renderPlot({
     req(res1d())
-    hist(res1d()$single, breaks = 50, main = "单次暴露感染风险分布",
-         xlab = "感染概率", col = "steelblue")
+    ggplot(data.frame(risk = res1d()$single), aes(x = risk)) +
+      geom_density(fill = "steelblue", alpha = 0.4, color = "steelblue") +
+      scale_x_log10() +
+      labs(title = "Single‑Exposure Infection Risk Density",
+           x = "Infection Probability (log scale)", y = "Density") +
+      theme_light(base_size = 14)
   })
 
   output$summary1d <- renderPrint({
@@ -198,8 +207,12 @@ server <- function(input, output, session) {
 
   output$annual_hist <- renderPlot({
     req(res1d())
-    hist(res1d()$annual, breaks = 50, main = "年感染风险分布",
-         xlab = "年感染概率", col = "forestgreen")
+    ggplot(data.frame(risk = res1d()$annual), aes(x = risk)) +
+      geom_density(fill = "forestgreen", alpha = 0.4, color = "forestgreen") +
+      scale_x_log10() +
+      labs(title = "Annual Infection Risk Density",
+           x = "Annual Infection Probability (log scale)", y = "Density") +
+      theme_light(base_size = 14)
   })
 
   output$annual_summary <- renderPrint({
@@ -207,9 +220,8 @@ server <- function(input, output, session) {
     summary(res1d()$annual)
   })
 
-  # 二维模拟结果
+  # 2D simulation (uses user-specified n_var and n_unc)
   res2d <- eventReactive(input$run2d, {
-    # 构建不确定性场景（使用相同的浓度分布）
     scen_unc <- new_scenario(
       pathogen_id          = input$pathogen,
       exposure_group       = input$exposure_group,
@@ -219,24 +231,25 @@ server <- function(input, output, session) {
       use_uncertainty      = TRUE,
       C_air_dist           = conc_dist()
     )
-
     if (input$annual_type == "fixed_freq") {
       freq <- input$freq
     } else {
       freq <- function(n) rpois(n, lambda = input$lambda)
     }
-
-    # 显示进度
-    withProgress(message = "正在运行二维模拟...", value = 0, {
-      res <- run_qmra_2d(scen_unc, n_var = 1000, n_unc = 300, frequency = freq)
+    withProgress(message = "Running 2D simulation...", value = 0, {
+      res <- run_qmra_2d(scen_unc, n_var = input$n_var, n_unc = input$n_unc, frequency = freq)
     })
     res
   })
 
   output$hist2d_overall <- renderPlot({
     req(res2d())
-    hist(res2d()$overall_risk, breaks = 50, main = "综合风险分布 (变异性+不确定性)",
-         xlab = "感染概率", col = "orange")
+    ggplot(data.frame(risk = res2d()$overall_risk), aes(x = risk)) +
+      geom_density(fill = "orange", alpha = 0.4, color = "orange") +
+      scale_x_log10() +
+      labs(title = "Combined Risk Distribution (Variability + Uncertainty)",
+           x = "Infection Probability (log scale)", y = "Density") +
+      theme_light(base_size = 14)
   })
 
   output$summary2d <- renderPrint({
@@ -246,13 +259,36 @@ server <- function(input, output, session) {
 
   output$hist2d_mean <- renderPlot({
     req(res2d())
-    hist(res2d()$mean_risk, breaks = 30, main = "平均风险的不确定性分布",
-         xlab = "平均感染概率", col = "purple")
+    ggplot(data.frame(mean_risk = res2d()$mean_risk), aes(x = mean_risk)) +
+      geom_density(fill = "purple", alpha = 0.4, color = "purple") +
+      scale_x_log10() +
+      labs(title = "Uncertainty Distribution of Mean Risk",
+           x = "Mean Infection Probability (log scale)", y = "Density") +
+      theme_light(base_size = 14)
   })
 
-  # 敏感性分析
+  # Variability boxplot across uncertainty iterations
+  output$var_boxplot <- renderPlot({
+    req(res2d())
+    mat <- res2d()$risk_matrix
+    ncols <- ncol(mat)
+    sample_cols <- if (ncols <= 20) 1:ncols else sort(sample.int(ncols, 20))
+    df <- as.data.frame(mat[, sample_cols, drop = FALSE])
+    colnames(df) <- paste0("Iter ", sample_cols)
+    df_long <- tidyr::pivot_longer(df, everything(), names_to = "Iteration", values_to = "Risk")
+
+    ggplot(df_long, aes(x = Iteration, y = Risk)) +
+      geom_boxplot(outlier.size = 0.5, fill = "#87CEEB", alpha = 0.7) +
+      scale_y_log10() +
+      labs(title = "Variability of Risk across Uncertainty Iterations",
+           subtitle = paste0("Randomly selected ", ncol(df), " iterations"),
+           x = "Uncertainty Iteration", y = "Infection Probability (log scale)") +
+      theme_minimal(base_size = 12) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+
+  # Sensitivity analysis
   observe({
-    # 一维敏感性（点估计模式，使用相同浓度分布）
     output$tornado1d <- renderPlot({
       scen_point <- new_scenario(
         pathogen_id          = input$pathogen,
@@ -264,13 +300,13 @@ server <- function(input, output, session) {
         C_air_dist           = conc_dist()
       )
       sens <- sensitivity_1d(scen_point, n_iter = 2000)
-      tornado_plot(sens, title = "一维 Spearman 敏感性")
+      tornado_plot(sens, title = "1D Spearman Sensitivity")
     })
   })
 
-  # Sobol' 分析（需要二维模拟的不确定性信息）
+  # Sobol' analysis
   sobol_result <- reactive({
-    req(res2d())  # 确保二维模拟已运行
+    req(res2d(), input$sobol_n, input$sobol_nboot)
     scen <- new_scenario(
       pathogen_id          = input$pathogen,
       exposure_group       = input$exposure_group,
@@ -280,13 +316,28 @@ server <- function(input, output, session) {
       use_uncertainty      = TRUE,
       C_air_dist           = conc_dist()
     )
-    # 使用二维模拟记录的信息或重新运行小的 Sobol'（基于数据库中的不确定性参数）
-    sobol_sensitivity(scen, n = 300, order = 2, nboot = 50)
+    sobol_sensitivity(scen, n = input$sobol_n, nboot = input$sobol_nboot)
   })
 
   output$sobol_plot <- renderPlot({
     req(sobol_result())
-    plot(sobol_result())
+    res <- sobol_result()
+    S <- as.data.frame(res$S) %>% rownames_to_column("Variable") %>%
+      rename(original = original, min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+    T <- as.data.frame(res$T) %>% rownames_to_column("Variable") %>%
+      rename(original = original, min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+    combined <- bind_rows(S %>% mutate(Type = "First-order"),
+                          T %>% mutate(Type = "Total-effect"))
+    ggplot(combined, aes(x = reorder(Variable, original), y = original, fill = Type)) +
+      geom_col(position = position_dodge(width = 0.7), width = 0.6) +
+      geom_errorbar(aes(ymin = pmax(0, min_ci), ymax = max_ci),
+                    position = position_dodge(width = 0.7), width = 0.15, color = "grey30") +
+      coord_flip() +
+      scale_fill_manual(values = c("First-order" = "steelblue", "Total-effect" = "coral")) +
+      labs(title = "Sobol' Variance Decomposition",
+           subtitle = "First-order and Total-effect Indices (95% CI)",
+           x = "", y = "Sobol' Index") +
+      theme_minimal(base_size = 14)
   })
 
   output$sobol_text <- renderPrint({
@@ -294,7 +345,6 @@ server <- function(input, output, session) {
     print(sobol_result())
   })
 }
-
 
 # Run the application
 shinyApp(ui = ui, server = server)
