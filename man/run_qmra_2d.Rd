@@ -9,7 +9,8 @@ run_qmra_2d(
   n_var = 5000,
   n_unc = 1000,
   probs = c(0.025, 0.5, 0.975),
-  frequency = NULL
+  frequency = NULL,
+  record_inputs = FALSE
 )
 }
 \arguments{
@@ -25,16 +26,24 @@ Default \code{c(0.025, 0.5, 0.975)}.}
 
 \item{frequency}{Optional. If provided, annual risk is also computed using
 this frequency (passed to \code{annual_risk()}). Can be a fixed integer or a function.}
+
+\item{record_inputs}{Logical. If \code{TRUE}, exposure variability matrices (C, IR, t,
+survival, deposition) are also recorded and returned (for global sensitivity
+analysis). Default \code{FALSE}.}
 }
 \value{
 An object of class \code{airqmra_2d}, which is a list containing:
 \item{risk_matrix}{Matrix of single-exposure risks (rows = variability, cols = uncertainty).}
+\item{overall_risk}{Numeric vector combining all variability and uncertainty samples.}
 \item{risk_quantiles}{Matrix of risk quantiles (rows = probs, columns = uncertainty iterations).}
 \item{mean_risk}{Numeric vector of mean risk per uncertainty iteration.}
 \item{summary}{Data frame with overall mean, median, and confidence limits of the mean risk.}
-\item{annual_quantiles}{If \code{frequency} is provided, annual risk quantiles matrix.}
-\item{annual_mean}{If \code{frequency} is provided, vector of annual mean risk per iteration.}
-\item{annual_summary}{If \code{frequency} is provided, data frame with annual mean, median, CI.}
+\item{param_list}{List (length = n_unc) of named vectors containing the dose‑response
+parameter values actually used in each uncertainty iteration. Always returned.}
+\item{annual_quantiles, annual_mean, annual_summary, overall_annual_risk}{If \code{frequency} is provided.}
+\item{C_matrix, IR_matrix, t_matrix, survival_matrix, deposition_matrix}{If \code{record_inputs = TRUE},
+matrices of exposure inputs (rows = variability, cols = uncertainty).}
+\item{annual_matrix}{If \code{frequency} is provided, matrix of annual risks (rows = variability, cols = uncertainty).}
 }
 \description{
 Performs a two-dimensional Monte Carlo simulation:
@@ -51,5 +60,9 @@ scen <- new_scenario(pathogen_id = "legionella pneumophila",
                      use_uncertainty = TRUE)
 res2d <- run_qmra_2d(scen, n_var = 2000, n_unc = 500, frequency = 240)
 summary(res2d)
-plot(res2d)
+hist(res2d$overall_risk, main="Combined variability & uncertainty")
+
+# With global sensitivity inputs recorded
+res2d_global <- run_qmra_2d(scen, n_var = 500, n_unc = 200,
+                            frequency = NULL, record_inputs = TRUE)
 }

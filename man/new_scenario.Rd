@@ -32,12 +32,12 @@ If not provided, \code{pathogen_id} or a generic name will be used.}
 \item{pathogen_id}{Character. English ID of the pathogen as in the built-in database.
 If \code{dr_pars} is NULL, dose-response parameters will be loaded from the database.}
 
-\item{C_air_dist}{Function. A function that generates air concentration samples (copies/m³).
+\item{C_air_dist}{Function. A function that generates air concentration samples (copies/m^3).
 Defaults to a lognormal distribution with GM=50, GSD=1.8.}
 
-\item{IR_dist}{Function. A function that generates inhalation rate samples (m³/h).
+\item{IR_dist}{Function. A function that generates inhalation rate samples (m^3/h).
 If not provided manually and \code{exposure_group} is given, it will be loaded automatically
-from the built-in exposure database (converted from m³/d to m³/h).}
+from the built-in exposure database (converted from m^3/d to m^3/h).}
 
 \item{t_exp}{Single numeric or function for exposure duration (hours).
 If not provided manually and \code{exposure_group} is given, it will be loaded automatically
@@ -77,8 +77,8 @@ If NULL (default), loaded automatically from the survival database.}
 \item{population_deposition}{Character. Population group for deposition data lookup.
 One of "Male", "Female", "Child", "Senior". Default "Male".}
 
-\item{use_uncertainty}{Logical. If TRUE, dose-response parameters (α, β, N₅₀, k) are sampled
-from their uncertainty distributions (log‑normal) stored in the pathogen database.
+\item{use_uncertainty}{Logical. If TRUE, dose-response parameters (alpha, beta, N50, k) are sampled
+from their uncertainty distributions (log-normal) stored in the pathogen database.
 If FALSE (default), point estimates are used.}
 
 \item{fallback}{Character vector. Fallback classifications for exposure data,

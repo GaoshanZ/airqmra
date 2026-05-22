@@ -4,11 +4,11 @@
 #'   If not provided, `pathogen_id` or a generic name will be used.
 #' @param pathogen_id Character. English ID of the pathogen as in the built-in database.
 #'   If `dr_pars` is NULL, dose-response parameters will be loaded from the database.
-#' @param C_air_dist Function. A function that generates air concentration samples (copies/m³).
+#' @param C_air_dist Function. A function that generates air concentration samples (copies/m^3).
 #'   Defaults to a lognormal distribution with GM=50, GSD=1.8.
-#' @param IR_dist Function. A function that generates inhalation rate samples (m³/h).
+#' @param IR_dist Function. A function that generates inhalation rate samples (m^3/h).
 #'   If not provided manually and `exposure_group` is given, it will be loaded automatically
-#'   from the built-in exposure database (converted from m³/d to m³/h).
+#'   from the built-in exposure database (converted from m^3/d to m^3/h).
 #' @param t_exp Single numeric or function for exposure duration (hours).
 #'   If not provided manually and `exposure_group` is given, it will be loaded automatically
 #'   from the time-activity database (converted from min/d to hours) or from an activity template.
@@ -35,8 +35,8 @@
 #'   If NULL (default), loaded automatically from the survival database.
 #' @param population_deposition Character. Population group for deposition data lookup.
 #'   One of "Male", "Female", "Child", "Senior". Default "Male".
-#' @param use_uncertainty Logical. If TRUE, dose-response parameters (α, β, N₅₀, k) are sampled
-#'   from their uncertainty distributions (log‑normal) stored in the pathogen database.
+#' @param use_uncertainty Logical. If TRUE, dose-response parameters (alpha, beta, N50, k) are sampled
+#'   from their uncertainty distributions (log-normal) stored in the pathogen database.
 #'   If FALSE (default), point estimates are used.
 #' @param fallback Character vector. Fallback classifications for exposure data,
 #'   in priority order. Default `c("Adult")`.
@@ -62,7 +62,7 @@ new_scenario <- function(pathogen_name = NULL,
                          use_uncertainty = FALSE,
                          fallback      = c("Adult")) {
 
-  # ---------- 剂量反应参数处理 ----------
+  # ---------- dose-response parameter handling ----------
   if (!is.null(dr_pars)) {
     if (!is.null(pathogen_id)) {
       message("Both 'pathogen_id' and 'dr_pars' provided. Using 'dr_pars' and ignoring 'pathogen_id'.")
@@ -75,7 +75,7 @@ new_scenario <- function(pathogen_name = NULL,
     if (nrow(rec) == 0) {
       stop("No pathogen found for '", pathogen_id, "'.")
     }
-    # 多参数选择逻辑
+    # multi-parameter selection logic
     if (nrow(rec) == 1) {
       chosen <- 1L
     } else {
@@ -116,10 +116,10 @@ new_scenario <- function(pathogen_name = NULL,
     chosen_row <- rec[chosen, ]
     model <- chosen_row$model
 
-    # 根据是否启用不确定性构建参数
+    # build parameters based on uncertainty setting
     if (use_uncertainty) {
       dr_generator <- build_dr_generator(chosen_row, use_uncertainty = TRUE)
-      dr_pars <- NULL   # 不确定性模式下不使用固定参数
+      dr_pars <- NULL   # not used in uncertainty mode
     } else {
       dr_generator <- NULL
       dr_pars <- list(type = model)
@@ -143,12 +143,12 @@ new_scenario <- function(pathogen_name = NULL,
     }
   }
 
-  # ---------- 暴露参数自动加载 ----------
+  # ---------- exposure parameter auto-loading ----------
   user_IR <- !is.null(IR_dist)
   user_t  <- !is.null(t_exp)
 
   if (!is.null(exposure_group)) {
-    # 1. 呼吸速率（长期，m³/d → m³/h）
+    # 1. inhalation rate (long-term, m^3/d -> m^3/h)
     if (!user_IR) {
       ir_info <- get_ir_long(exposure_group, fallback = fallback)
       if (!is.null(ir_info)) {
@@ -156,27 +156,27 @@ new_scenario <- function(pathogen_name = NULL,
                                              meanlog = ir_info$log_mean - log(24),
                                              sdlog   = ir_info$log_sd)
         message("IR_dist set from database for group '", exposure_group,
-                "' (converted to m³/h).")
+                "' (converted to m^3/h).")
       }
     }
 
-    # 2. 暴露时间
+    # 2. exposure time
     if (!user_t) {
       if (!is.null(activity_template) && !is.null(activity_intensity)) {
-        # 使用活动模板固定时长
+        # use fixed duration from activity template
         budget <- get_activity_budget(activity_template)
         act_min <- budget$minutes[activity_intensity]
         if (is.na(act_min)) {
           stop("Activity intensity '", activity_intensity, "' not in template '", activity_template, "'.")
         }
-        t_exp <- act_min / 60   # 转为小时
+        t_exp <- act_min / 60   # convert to hours
         message("Exposure duration set to ", t_exp, " hours (from template '",
                 activity_template, "', intensity '", activity_intensity, "').")
       } else {
-        # 使用时间活动模式数据库（室内/室外，分钟分布）
+        # use time-activity database (indoor/outdoor, minute distribution)
         time_info <- get_time(exposure_group, microenvironment, season, fallback = fallback)
         if (!is.null(time_info)) {
-          # 分钟 → 小时
+          # minutes -> hours
           t_exp <- function(n) stats::rlnorm(n,
                                              meanlog = time_info$log_mean - log(60),
                                              sdlog   = time_info$log_sd)
@@ -188,7 +188,7 @@ new_scenario <- function(pathogen_name = NULL,
     }
   }
 
-  # ---------- 存活率加载 ----------
+  # ---------- survival rate loading ----------
   if (is.null(survival)) {
     surv_rec <- get_survival(pathogen_id)
     survival_dist <- switch(surv_rec$dist,
@@ -205,7 +205,7 @@ new_scenario <- function(pathogen_name = NULL,
     survival_dist <- function(n) rep(survival, n)
   }
 
-  # ---------- 沉积率加载 ----------
+  # ---------- deposition rate loading ----------
   if (is.null(deposition)) {
     dep_rec <- get_deposition(population_deposition, site = "PUL")
     if (!is.null(dep_rec)) {
@@ -217,7 +217,7 @@ new_scenario <- function(pathogen_name = NULL,
       )
       message("Deposition distribution loaded for population '", population_deposition, "'.")
     } else {
-      deposition_dist <- function(n) rep(0.5, n)  # 安全回退
+      deposition_dist <- function(n) rep(0.5, n)  # safe fallback
     }
   } else if (is.function(deposition)) {
     deposition_dist <- deposition
@@ -225,14 +225,14 @@ new_scenario <- function(pathogen_name = NULL,
     deposition_dist <- function(n) rep(deposition, n)
   }
 
-  # ---------- AG 固定为 1（默认不额外乘）----------
+  # ---------- AG fixed to 1 (no additional multiplication by default) ----------
   if (is.function(AG)) {
     AG_dist <- AG
   } else {
     AG_dist <- function(n) rep(AG, n)
   }
 
-  # ---------- 场景命名 ----------
+  # ---------- scenario naming ----------
   if (is.null(pathogen_name)) {
     if (!is.null(pathogen_id)) {
       pathogen_name <- pathogen_id
@@ -241,7 +241,7 @@ new_scenario <- function(pathogen_name = NULL,
     }
   }
 
-  # ---------- 设置最终默认值 ----------
+  # ---------- set final defaults ----------
   if (is.null(IR_dist)) {
     IR_dist <- function(n) stats::rnorm(n, mean = 0.7, sd = 0.1)
   }
@@ -249,7 +249,7 @@ new_scenario <- function(pathogen_name = NULL,
     t_exp <- 1.0
   }
 
-  # ---------- 构建场景对象 ----------
+  # ---------- build scenario object ----------
   scenario <- list(
     pathogen         = pathogen_name,
     pathogen_id      = pathogen_id,
@@ -260,7 +260,7 @@ new_scenario <- function(pathogen_name = NULL,
     deposition_dist  = deposition_dist,
     survival_dist    = survival_dist,
     dr_pars          = dr_pars,
-    dr_generator     = dr_generator   # 不确定性参数生成器（可能为 NULL）
+    dr_generator     = dr_generator   # uncertainty parameter generator (may be NULL)
   )
   class(scenario) <- c("airqmra_scenario", "list")
   scenario
@@ -285,15 +285,15 @@ run_qmra_1d <- function(scenario, n_iter = 1e5) {
     scenario$deposition_dist(n_iter) *
     scenario$AG_dist(n_iter)
 
-  # 获取剂量-反应参数（兼容点估计与不确定性生成器）
+  # Obtain dose-response parameters (compatible with point estimate and uncertainty generator)
   if (!is.null(scenario$dr_generator)) {
-    # 不确定性模式：生成器返回列表，包含 type 和参数向量
+    # uncertainty mode: generator returns a list with type and parameter vectors
     dr_params <- scenario$dr_generator(n_iter)
     type <- dr_params$type
     dr_args <- dr_params[names(dr_params) != "type"]
     risk <- do.call(dose_response, c(list(dose = dose, type = type), dr_args))
   } else {
-    # 点估计模式：使用场景中预先配置的固定参数列表
+    # point estimate mode: use the fixed parameter list pre-configured in the scenario
     dr  <- scenario$dr_pars
     type <- dr$type
     dr_args <- dr[names(dr) != "type"]

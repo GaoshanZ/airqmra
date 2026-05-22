@@ -36,11 +36,11 @@ compute_sensitivity <- function(data, output_col, method = "spearman") {
 }
 
 
-#' Sensitivity analysis for a 1D (point‑estimate) QMRA scenario
+#' Sensitivity analysis for a 1D (point-estimate) QMRA scenario
 #'
 #' Runs a 1D Monte Carlo simulation, records all input random samples and the
 #' resulting risk, and computes Spearman rank correlation coefficients.
-#' This function is intended for point‑estimate scenarios (`use_uncertainty = FALSE`).
+#' This function is intended for point-estimate scenarios (`use_uncertainty = FALSE`).
 #' **Note:** AG is excluded from the sensitivity analysis because it is fixed (no variability).
 #'
 #' @param scenario An `airqmra_scenario` object (from `new_scenario`).
@@ -51,16 +51,16 @@ compute_sensitivity <- function(data, output_col, method = "spearman") {
 #'   \item{data}{Data frame containing all sampled inputs and the risk.}
 #' @export
 sensitivity_1d <- function(scenario, n_iter = 5000) {
-  # 生成所有输入变量的样本
+  # Generate all input variable samples
   C <- scenario$C_air_dist(n_iter)
   IR <- scenario$IR_dist(n_iter)
   t <- scenario$t_exp_dist(n_iter)
   survival <- scenario$survival_dist(n_iter)
   deposition <- scenario$deposition_dist(n_iter)
-  # AG 固定为 1，虽然乘入剂量，但不作为敏感性变量
+  # AG fixed to 1, multiplied in dose but excluded from sensitivity
   AG <- scenario$AG_dist(n_iter)
 
-  dose <- C * IR * t * survival * deposition * AG   # 剂量计算保持不变
+  dose <- C * IR * t * survival * deposition * AG
 
   dr <- scenario$dr_pars
   type <- dr$type
@@ -79,7 +79,7 @@ sensitivity_1d <- function(scenario, n_iter = 5000) {
     stop("Unknown dose-response type: ", type)
   }
 
-  # 构建数据框：不包含 AG
+  # Build data frame without AG
   df <- data.frame(
     C = C,
     IR = IR,
@@ -125,6 +125,11 @@ sensitivity_2d <- function(param_values, mean_risk, param_name) {
 #' @export
 #'
 #' @examples
+#' scen_unc <- new_scenario(pathogen_id = "legionella pneumophila",
+#'                          exposure_group = "Adult",
+#'                          microenvironment = "Outdoor",
+#'                          population_deposition = "Male",
+#'                          use_uncertainty = TRUE)
 #' res2d <- run_qmra_2d(scen_unc, n_var = 500, n_unc = 200,
 #'                      frequency = NULL, record_inputs = TRUE)
 #' sens_global <- sensitivity_global(res2d)
@@ -137,26 +142,26 @@ sensitivity_global <- function(res2d, method = "spearman") {
   n_var <- nrow(res2d$C_matrix)
   n_unc <- ncol(res2d$C_matrix)
 
-  # 将变异性输入矩阵拉直为向量
+  # Flatten variability input matrices into vectors
   C_vec <- as.vector(res2d$C_matrix)
   IR_vec <- as.vector(res2d$IR_matrix)
   t_vec <- as.vector(res2d$t_matrix)
   survival_vec <- as.vector(res2d$survival_matrix)
   deposition_vec <- as.vector(res2d$deposition_matrix)
 
-  # 参数向量：匹配长度 n_var * n_unc
+  # Parameter vectors: match length n_var * n_unc
   param_df <- do.call(rbind, lapply(res2d$param_list, function(p) {
     data.frame(t(p))
   }))
-  # 将每一列复制 n_var 次，以匹配变异性样本
+  # Replicate each column n_var times
   param_vec_list <- lapply(param_df, function(x) {
     rep(x, each = n_var)
   })
 
-  # 整体风险向量
+  # Overall risk vector
   overall_risk <- res2d$overall_risk
 
-  # 构造数据框
+  # Construct data frame
   df <- data.frame(
     C = C_vec,
     IR = IR_vec,
@@ -164,7 +169,7 @@ sensitivity_global <- function(res2d, method = "spearman") {
     survival = survival_vec,
     deposition = deposition_vec
   )
-  # 添加上参数列
+  # Add parameter columns
   for (nm in names(param_vec_list)) {
     df[[nm]] <- param_vec_list[[nm]]
   }
@@ -185,7 +190,7 @@ sensitivity_global <- function(res2d, method = "spearman") {
 #' @return A ggplot object (if ggplot2 is installed) or a base R barplot.
 #' @export
 tornado_plot <- function(sens, title = "Sensitivity Analysis", xlab = "Spearman Correlation") {
-  # 提取 ranking 数据框
+  # Extract ranking data frame
   if ("sensitivity" %in% names(sens)) {
     ranking <- sens$sensitivity$ranking
   } else if ("ranking" %in% names(sens)) {
@@ -204,7 +209,7 @@ tornado_plot <- function(sens, title = "Sensitivity Analysis", xlab = "Spearman 
       ggplot2::scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "firebrick"), guide = "none")
     return(p)
   } else {
-    # 基础绘图
+    # Base R barplot
     barplot(ranking$Correlation, names.arg = ranking$Variable, horiz = TRUE,
             col = ifelse(ranking$Correlation > 0, "steelblue", "firebrick"),
             main = title, xlab = xlab)
@@ -212,17 +217,152 @@ tornado_plot <- function(sens, title = "Sensitivity Analysis", xlab = "Spearman 
 }
 
 
-
 #' Sensitivity analysis for 2D Monte Carlo results (convenience wrapper)
 #'
 #' @param res2d An object of class `airqmra_2d`.
-#' @return A list with correlations and ranking for the primary dose‑response parameter.
+#' @return A list with correlations and ranking for the primary dose-response parameter.
 #' @export
 sensitivity_2d_auto <- function(res2d) {
   if (is.null(res2d$param_list)) stop("res2d must contain param_list (always present).")
-  # 提取第一个参数（对于指数模型是 k，贝塔模型可能是 alpha）
+  # Extract the first parameter (k for exponential, alpha for beta models)
   param_name <- names(res2d$param_list[[1]])[1]
   param_values <- sapply(res2d$param_list, function(x) x[param_name])
   mean_risk <- res2d$mean_risk
   sensitivity_2d(param_values, mean_risk, param_name = param_name)
+}
+
+
+#' Global sensitivity analysis for annual risk (combined variability & uncertainty)
+#'
+#' Uses recorded exposure inputs and annual risk from a 2D simulation to compute
+#' Spearman correlations for all input variables (exposure and dose-response parameters).
+#'
+#' @param res2d An object of class `airqmra_2d` created with
+#'   `run_qmra_2d(..., frequency = <your frequency>, record_inputs = TRUE)`.
+#' @param method Correlation method, default `"spearman"`.
+#'
+#' @return A list as from \code{\link{compute_sensitivity}} with correlations and ranking.
+#' @export
+sensitivity_global_annual <- function(res2d, method = "spearman") {
+  if (is.null(res2d$annual_matrix)) {
+    stop("The 2D simulation must include annual risk (supply 'frequency' to run_qmra_2d).")
+  }
+  if (is.null(res2d$C_matrix) || is.null(res2d$param_list)) {
+    stop("The 2D simulation must be run with 'record_inputs = TRUE'.")
+  }
+
+  n_var <- nrow(res2d$C_matrix)
+  n_unc <- ncol(res2d$C_matrix)
+
+  # Flatten variability inputs
+  C_vec <- as.vector(res2d$C_matrix)
+  IR_vec <- as.vector(res2d$IR_matrix)
+  t_vec <- as.vector(res2d$t_matrix)
+  survival_vec <- as.vector(res2d$survival_matrix)
+  deposition_vec <- as.vector(res2d$deposition_matrix)
+
+  # Expand parameter vectors
+  param_df <- do.call(rbind, lapply(res2d$param_list, function(p) data.frame(t(p))))
+  param_vec_list <- lapply(param_df, function(x) rep(x, each = n_var))
+
+  # Overall annual risk vector
+  overall_annual_risk <- as.vector(res2d$annual_matrix)
+
+  # Construct data frame
+  df <- data.frame(
+    C = C_vec,
+    IR = IR_vec,
+    t = t_vec,
+    survival = survival_vec,
+    deposition = deposition_vec
+  )
+  for (nm in names(param_vec_list)) {
+    df[[nm]] <- param_vec_list[[nm]]
+  }
+  df$annual_risk <- overall_annual_risk
+
+  compute_sensitivity(df, output_col = "annual_risk", method = method)
+}
+
+
+#' Sensitivity analysis for annual risk (variability only, point-estimate mode)
+#'
+#' Runs a 1D Monte Carlo simulation, converts single-exposure risk to annual risk
+#' using the given frequency, and computes Spearman correlations between exposure
+#' variables and the annual risk.
+#'
+#' @param scenario An `airqmra_scenario` object (from `new_scenario` with `use_uncertainty = FALSE`).
+#' @param n_iter Number of Monte Carlo iterations.
+#' @param frequency Either a fixed integer or a function for annual exposure frequency.
+#'
+#' @return A list as from `compute_sensitivity`, with additional element `annual_risk`.
+#' @export
+sensitivity_1d_annual <- function(scenario, n_iter = 5000, frequency) {
+  # Generate all input variable samples
+  C <- scenario$C_air_dist(n_iter)
+  IR <- scenario$IR_dist(n_iter)
+  t <- scenario$t_exp_dist(n_iter)
+  survival <- scenario$survival_dist(n_iter)
+  deposition <- scenario$deposition_dist(n_iter)
+  AG <- scenario$AG_dist(n_iter)
+
+  dose <- C * IR * t * survival * deposition * AG
+
+  dr <- scenario$dr_pars
+  type <- dr$type
+  if (type == "exponential") {
+    k <- dr$k
+    single_risk <- 1 - exp(-k * dose)
+  } else if (type == "exact_beta_poisson") {
+    alpha <- dr$alpha
+    beta <- dr$beta
+    single_risk <- exact_beta_poisson(dose, alpha, beta)
+  } else if (type == "approx_beta_poisson") {
+    alpha <- dr$alpha
+    N50 <- dr$N50
+    single_risk <- approx_beta_poisson(dose, alpha, N50)
+  } else {
+    stop("Unknown dose-response type: ", type)
+  }
+
+  # Calculate annual risk
+  annual_risk_vec <- annual_risk(single_risk, frequency = frequency)
+
+  # Build data frame (no AG)
+  df <- data.frame(
+    C = C,
+    IR = IR,
+    t = t,
+    survival = survival,
+    deposition = deposition,
+    annual_risk = annual_risk_vec
+  )
+
+  sens <- compute_sensitivity(df, output_col = "annual_risk")
+  list(sensitivity = sens, data = df, annual_risk = annual_risk_vec)
+}
+
+
+#' Sensitivity of annual risk to dose-response parameter uncertainty
+#'
+#' Uses the recorded parameter values and annual mean risk from a 2D simulation
+#' to calculate Spearman correlation between the dose-response parameter (e.g., k)
+#' and the mean annual risk per uncertainty iteration.
+#'
+#' @param res2d An object of class `airqmra_2d` created with `frequency` specified.
+#' @return A list as from `compute_sensitivity`.
+#' @export
+sensitivity_2d_annual_auto <- function(res2d) {
+  if (is.null(res2d$annual_mean)) {
+    stop("The 2D simulation must include annual risk (supply 'frequency' to run_qmra_2d).")
+  }
+  if (is.null(res2d$param_list)) {
+    stop("res2d must contain param_list (always present).")
+  }
+  # Extract first parameter name
+  param_name <- names(res2d$param_list[[1]])[1]
+  param_values <- sapply(res2d$param_list, function(x) x[param_name])
+  df <- data.frame(param = param_values, mean_annual_risk = res2d$annual_mean)
+  names(df)[1] <- param_name
+  compute_sensitivity(df, output_col = "mean_annual_risk")
 }
