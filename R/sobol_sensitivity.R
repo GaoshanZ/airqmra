@@ -1,26 +1,33 @@
 #' Sobol' variance-based global sensitivity analysis (variability + uncertainty)
 #'
-#' Performs a Sobol' sensitivity analysis on single-exposure (or annual) infection risk.
-#' The input variables include exposure factors (C, IR, t, survival, deposition) and,
-#' when available, the dose-response parameters (k for exponential; alpha and N50 for
-#' approximate beta-Poisson; alpha and beta for exact beta-Poisson) with their
-#' uncertainty distributions taken from the pathogen database.
+#' Performs a Sobol' sensitivity analysis on single-exposure (or annual) infection
+#' risk. The input variables include exposure factors (C, IR, t, survival,
+#' deposition) and, when available, the dose-response parameters (k for
+#' exponential; alpha and N50 for approximate beta-Poisson; alpha and beta for
+#' exact beta-Poisson) with their uncertainty distributions taken from the
+#' pathogen database.
 #'
-#' @param scenario An `airqmra_scenario` object created with `use_uncertainty = FALSE`
-#'   (point-estimate mode) or `use_uncertainty = TRUE` (uncertainty mode). The function
-#'   will automatically extract the necessary information from the scenario.
-#' @param n Integer. Base sample size for Sobol' design. Total model evaluations
-#'   will be `n * (p + 2)` where `p` is the total number of input variables.
-#' @param order Integer. Order of Sobol' indices to compute (1 for first-order,
-#'   2 for first + total, 3 for first + second + total). Default 2.
+#' @param scenario An `airqmra_scenario` object created with
+#'   `use_uncertainty = FALSE` (point-estimate mode) or `use_uncertainty = TRUE`
+#'   (uncertainty mode).
+#' @param n Integer. Base sample size for the Sobol' design. Default 1000.
+#' @param order Integer. Order of Sobol' indices to compute when `method = "sobol"`
+#'   (1 for first-order + total, 2 for first + second, 3 for first + second +
+#'   third + total). Ignored when `method = "sobol2007"`. Default 2.
 #' @param nboot Integer. Number of bootstrap replicates for confidence intervals.
 #' @param conf Numeric. Confidence level for intervals (0-1). Default 0.95.
 #' @param frequency Optional. If provided, the model function returns annual risk
-#'   instead of single-exposure risk (using `annual_risk()`). Can be a fixed integer
-#'   or a function.
+#'   instead of single-exposure risk (using `annual_risk()`).
+#' @param method Character. Sobol' algorithm to use. `"sobol2007"` (default)
+#'   computes first-order and total-effect indices directly and is recommended
+#'   for most applications. `"sobol"` uses the older algorithm and allows
+#'   specifying higher-order interactions via `order`.
 #'
-#' @return An object of class `sobol` (from the `sensitivity` package) containing
-#'   the estimated Sobol' indices and their bootstrap confidence intervals.
+#' @return An object of class `"sobol2007"` or `"sobol"` (from the `sensitivity`
+#'   package) containing the estimated indices and bootstrap confidence intervals.
+#'   When `method = "sobol2007"`, the object contains `$S` (first-order) and `$T`
+#'   (total-effect) matrices. When `method = "sobol"`, the content depends on
+#'   `order`.
 #' @export
 #'
 #' @examples
@@ -30,15 +37,22 @@
 #'                      microenvironment = "Outdoor",
 #'                      population_deposition = "Male",
 #'                      use_uncertainty = TRUE)
-#' sobol_res <- sobol_sensitivity(scen, n = 500, order = 2, nboot = 100)
+#' sobol_res <- sobol_sensitivity(scen, n = 500)
 #' print(sobol_res)
 #' plot(sobol_res)
 #'
 #' # Annual risk Sobol' analysis
 #' sobol_annual <- sobol_sensitivity(scen, n = 500, frequency = 20)
 #' plot(sobol_annual)
-sobol_sensitivity <- function(scenario, n = 1000, order = 2, nboot = 100, conf = 0.95,
-                              frequency = NULL) {
+sobol_sensitivity <- function(scenario,
+                              n = 1000,
+                              order = 2,
+                              nboot = 100,
+                              conf = 0.95,
+                              frequency = NULL,
+                              method = c("sobol2007", "sobol")) {
+  method <- match.arg(method)
+
   if (!requireNamespace("sensitivity", quietly = TRUE)) {
     stop("Package 'sensitivity' is required for Sobol' analysis. Please install it.")
   }
@@ -54,15 +68,14 @@ sobol_sensitivity <- function(scenario, n = 1000, order = 2, nboot = 100, conf =
   }
   rec <- pathogen_info(pathogen_id)
   if (nrow(rec) == 0) stop("Pathogen not found in database.")
-  # if multiple records, use the first one (simplified here; can be aligned with scenario selection)
   chosen_row <- rec[1, ]
-  model_type <- chosen_row$model   # directly use model type from database
+  model_type <- chosen_row$model
   if (is.null(model_type) || is.na(model_type)) {
     stop("Model type not found in pathogen database.")
   }
 
   # ---- 3. extract parameter uncertainty information ----
-  param_info <- list()   # each element: name, log_mean, log_sd
+  param_info <- list()
   if (model_type == "exponential") {
     if (!is.na(chosen_row$k_log_mean) && !is.na(chosen_row$k_log_sd)) {
       param_info[[1]] <- list(name = "k",
@@ -95,7 +108,6 @@ sobol_sensitivity <- function(scenario, n = 1000, order = 2, nboot = 100, conf =
     stop("Unsupported dose-response model type: ", model_type)
   }
 
-  # all input variable names
   var_names <- c(var_exp, sapply(param_info, `[[`, "name"))
   p_total <- length(var_names)
 
@@ -104,7 +116,6 @@ sobol_sensitivity <- function(scenario, n = 1000, order = 2, nboot = 100, conf =
   X2 <- matrix(NA_real_, nrow = n, ncol = p_total)
   colnames(X1) <- colnames(X2) <- var_names
 
-  # exposure variable sampling
   X1[, 1] <- scenario$C_air_dist(n)
   X1[, 2] <- scenario$IR_dist(n)
   X1[, 3] <- scenario$t_exp_dist(n)
@@ -117,7 +128,6 @@ sobol_sensitivity <- function(scenario, n = 1000, order = 2, nboot = 100, conf =
   X2[, 4] <- scenario$survival_dist(n)
   X2[, 5] <- scenario$deposition_dist(n)
 
-  # parameter uncertainty sampling (log-normal)
   for (j in seq_along(param_info)) {
     col_idx <- p_exp + j
     X1[, col_idx] <- rlnorm(n, meanlog = param_info[[j]]$log_mean,
@@ -131,15 +141,15 @@ sobol_sensitivity <- function(scenario, n = 1000, order = 2, nboot = 100, conf =
     dose <- X[, 1] * X[, 2] * X[, 3] * X[, 4] * X[, 5]   # AG = 1
 
     if (model_type == "exponential") {
-      k_vec <- X[, "k"]
+      k_vec <- if ("k" %in% var_names) X[, "k"] else rep(chosen_row$k, nrow(X))
       single <- 1 - exp(-k_vec * dose)
     } else if (model_type == "exact_beta_poisson") {
-      alpha_vec <- X[, "alpha"]
-      beta_vec  <- X[, "beta"]
+      alpha_vec <- if ("alpha" %in% var_names) X[, "alpha"] else rep(chosen_row$alpha, nrow(X))
+      beta_vec  <- if ("beta" %in% var_names) X[, "beta"] else rep(chosen_row$beta, nrow(X))
       single <- exact_beta_poisson(dose, alpha_vec, beta_vec)
     } else if (model_type == "approx_beta_poisson") {
-      alpha_vec <- X[, "alpha"]
-      N50_vec   <- X[, "N50"]
+      alpha_vec <- if ("alpha" %in% var_names) X[, "alpha"] else rep(chosen_row$alpha, nrow(X))
+      N50_vec   <- if ("N50" %in% var_names) X[, "N50"] else rep(chosen_row$N50, nrow(X))
       single <- approx_beta_poisson(dose, alpha_vec, N50_vec)
     } else {
       stop("Unknown model type.")
@@ -152,7 +162,13 @@ sobol_sensitivity <- function(scenario, n = 1000, order = 2, nboot = 100, conf =
     }
   }
 
-  # ---- 6. run Sobol' analysis ----
-  sensitivity::sobol(model = model_func, X1 = X1, X2 = X2,
-                     order = order, nboot = nboot, conf = conf)
+  # ---- 6. run Sobol' analysis (select method) ----
+  if (method == "sobol2007") {
+    res <- sensitivity::sobol2007(model = model_func, X1 = X1, X2 = X2,
+                                  nboot = nboot, conf = conf)
+  } else {
+    res <- sensitivity::sobol(model = model_func, X1 = X1, X2 = X2,
+                              order = order, nboot = nboot, conf = conf)
+  }
+  res
 }
