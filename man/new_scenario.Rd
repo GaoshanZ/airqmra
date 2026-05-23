@@ -85,7 +85,12 @@ If FALSE (default), point estimates are used.}
 in priority order. Default \code{c("Adult")}.}
 }
 \value{
-An object of class \code{airqmra_scenario}.
+An object of class \code{airqmra_scenario}, which is a list containing the
+random generator functions for all inputs, dose‑response parameters, and
+the key scenario configuration parameters (exposure_group, microenvironment,
+season, population_deposition, activity_template, activity_intensity,
+use_uncertainty). These stored values allow reconstruction of similar
+scenarios without re-specifying all settings.
 }
 \description{
 Create an inhalation QMRA exposure scenario

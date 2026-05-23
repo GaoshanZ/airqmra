@@ -1,0 +1,14 @@
+style_css <- c(
+  "body {",
+  "  font-family: '宋体', 'SimSun', 'Times New Roman', serif;",
+  "  font-size: 12pt;",
+  "  line-height: 1.5;",
+  "}",
+  "h1, h2, h3, h4, h5, h6 {",
+  "  font-family: '黑体', 'SimHei', 'Times New Roman', sans-serif;",
+  "}",
+  "code, pre {",
+  "  font-family: 'Consolas', 'Courier New', monospace;",
+  "}"
+)
+writeLines(style_css, "inst/rmarkdown/templates/risk_report/style.css", useBytes = TRUE)

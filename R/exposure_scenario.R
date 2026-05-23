@@ -41,7 +41,12 @@
 #' @param fallback Character vector. Fallback classifications for exposure data,
 #'   in priority order. Default `c("Adult")`.
 #'
-#' @return An object of class `airqmra_scenario`.
+#' @return An object of class `airqmra_scenario`, which is a list containing the
+#'   random generator functions for all inputs, dose‑response parameters, and
+#'   the key scenario configuration parameters (exposure_group, microenvironment,
+#'   season, population_deposition, activity_template, activity_intensity,
+#'   use_uncertainty). These stored values allow reconstruction of similar
+#'   scenarios without re-specifying all settings.
 #' @export
 new_scenario <- function(pathogen_name = NULL,
                          pathogen_id   = NULL,
@@ -67,6 +72,7 @@ new_scenario <- function(pathogen_name = NULL,
     if (!is.null(pathogen_id)) {
       message("Both 'pathogen_id' and 'dr_pars' provided. Using 'dr_pars' and ignoring 'pathogen_id'.")
     }
+    dr_generator <- NULL
   } else {
     if (is.null(pathogen_id)) {
       stop("Either 'dr_pars' or 'pathogen_id' must be provided.")
@@ -260,7 +266,15 @@ new_scenario <- function(pathogen_name = NULL,
     deposition_dist  = deposition_dist,
     survival_dist    = survival_dist,
     dr_pars          = dr_pars,
-    dr_generator     = dr_generator   # uncertainty parameter generator (may be NULL)
+    dr_generator     = dr_generator,   # uncertainty parameter generator (may be NULL)
+    # Store key configuration parameters for later reuse
+    exposure_group   = exposure_group,
+    microenvironment = microenvironment,
+    season           = season,
+    population_deposition = population_deposition,
+    activity_template = activity_template,
+    activity_intensity = activity_intensity,
+    use_uncertainty  = use_uncertainty
   )
   class(scenario) <- c("airqmra_scenario", "list")
   scenario

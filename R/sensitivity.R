@@ -181,16 +181,18 @@ sensitivity_global <- function(res2d, method = "spearman") {
 
 #' Create a tornado (sensitivity) plot
 #'
-#' @param sens A sensitivity object from \code{\link{compute_sensitivity}},
-#'   \code{\link{sensitivity_1d}}, \code{\link{sensitivity_2d}}, or
-#'   \code{\link{sensitivity_global}}.
-#' @param title Character. Plot title.
-#' @param xlab Character. Label for x-axis.
+#' @param sens A sensitivity object.
+#' @param ... Additional arguments passed to methods.
 #'
-#' @return A ggplot object (if ggplot2 is installed) or a base R barplot.
 #' @export
-tornado_plot <- function(sens, title = "Sensitivity Analysis", xlab = "Spearman Correlation") {
-  # Extract ranking data frame
+tornado_plot <- function(sens, ...) {
+  UseMethod("tornado_plot")
+}
+
+#' @export
+tornado_plot.default <- function(sens, title = "Sensitivity Analysis",
+                                 xlab = "Spearman Correlation", ...) {
+  # Extract ranking data frame (works for compute_sensitivity, sensitivity_1d, etc.)
   if ("sensitivity" %in% names(sens)) {
     ranking <- sens$sensitivity$ranking
   } else if ("ranking" %in% names(sens)) {
@@ -209,13 +211,11 @@ tornado_plot <- function(sens, title = "Sensitivity Analysis", xlab = "Spearman 
       ggplot2::scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "firebrick"), guide = "none")
     return(p)
   } else {
-    # Base R barplot
     barplot(ranking$Correlation, names.arg = ranking$Variable, horiz = TRUE,
             col = ifelse(ranking$Correlation > 0, "steelblue", "firebrick"),
             main = title, xlab = xlab)
   }
 }
-
 
 #' Sensitivity analysis for 2D Monte Carlo results (convenience wrapper)
 #'

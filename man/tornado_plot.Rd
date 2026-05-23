@@ -4,23 +4,12 @@
 \alias{tornado_plot}
 \title{Create a tornado (sensitivity) plot}
 \usage{
-tornado_plot(
-  sens,
-  title = "Sensitivity Analysis",
-  xlab = "Spearman Correlation"
-)
+tornado_plot(sens, ...)
 }
 \arguments{
-\item{sens}{A sensitivity object from \code{\link{compute_sensitivity}},
-\code{\link{sensitivity_1d}}, \code{\link{sensitivity_2d}}, or
-\code{\link{sensitivity_global}}.}
+\item{sens}{A sensitivity object.}
 
-\item{title}{Character. Plot title.}
-
-\item{xlab}{Character. Label for x-axis.}
-}
-\value{
-A ggplot object (if ggplot2 is installed) or a base R barplot.
+\item{...}{Additional arguments passed to methods.}
 }
 \description{
 Create a tornado (sensitivity) plot

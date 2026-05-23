@@ -12,6 +12,7 @@ Imports:
     dplyr,
     fitdistrplus,
     hypergeo,
+    numDeriv,
     sensitivity,
     shiny,
     shinythemes
@@ -19,4 +20,6 @@ Depends:
     R (>= 3.5)
 LazyData: true
 Suggests: 
-    ggplot2
+    ggplot2,
+    knitr,
+    rmarkdown

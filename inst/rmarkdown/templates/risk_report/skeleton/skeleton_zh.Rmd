@@ -1,0 +1,185 @@
+---
+title: "大气环境生物气溶胶感染风险评估报告"
+output:
+  html_document:
+    css: style.css
+    theme: united
+params:
+  scenario: NA
+  results: NA
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(airqmra); library(ggplot2); library(dplyr); library(tibble)
+scen <- params$scenario
+res  <- params$results
+```
+
+# 1. 评估概要
+
+本报告依据《大气环境生物气溶胶健康风险评估技术方法指南》（T/CSES XXXX-XXXX）第六章编制。
+
+- **目标病原体**：`r scen$pathogen`
+- **暴露人群**：`r scen$exposure_group`
+- **微环境**：`r scen$microenvironment`，**季节**：`r scen$season`
+- **模拟方法**：
+`r if (!is.null(res$res2d)) "二维蒙特卡洛（变异性+参数不确定性）" else "一维蒙特卡洛（仅传播变异性）"`
+- **评估工具**：`airqmra` R 包（版本 `r utils::packageVersion("airqmra")`）
+
+# 2. 数据来源
+
+- **暴露浓度**：来源于现场采样及实验室分析。
+- **剂量‑反应参数**：来自 `airqmra` 内置数据库（`pathogen_db`）。
+- **暴露参数**：主要引自《中国人群暴露参数手册》。
+
+# 3. 评估方法
+
+## 3.1 危害识别
+`r scen$pathogen` 为感染性病原体，主要经吸入途径引起感染。
+
+## 3.2 剂量‑反应评估
+本次评估选用 **`r scen$dr_pars$type`** 模型。
+```{r dr-params, results='asis'}
+if (scen$dr_pars$type == "exponential") {
+  cat("$$P = 1 - \\exp(-k \\cdot d)$$\n")
+  cat("参数 **k** = ", signif(scen$dr_pars$k, 4))
+} else if (scen$dr_pars$type == "approx_beta_poisson") {
+  cat("$$P = 1 - \\left[1 + \\frac{d}{N_{50}}(2^{1/\\alpha}-1)\\right]^{-\\alpha}$$\n")
+  cat("参数 **α** = ", scen$dr_pars$alpha, " **N₅₀** = ", signif(scen$dr_pars$N50, 4))
+}
+```
+
+## 3.3 暴露评估
+$$d = C \times IR \times T \times f_{\text{survival}} \times f_{\text{deposition}}$$
+```{r expo-detail}
+# 显示具体分布参数
+cat("**吸入速率 (IR)**：自动加载 `r scen$exposure_group` 人群长期呼吸速率（m³/h），采用对数正态分布。\n")
+cat("**暴露时间 (T)**：根据微环境与季节从时间‑活动数据库加载。\n")
+cat("**存活率 (f_survival)**：来自实证研究，对数正态分布，μ = -1.322, σ = 0.427。\n")
+dep_pop <- ifelse(!is.null(scen$population_deposition), scen$population_deposition, "Male")
+cat("**沉积率 (f_deposition)**：基于 `r dep_pop` 人群肺部沉积参数，对数正态分布。\n")
+```
+
+## 3.4 风险表征
+- **单次感染风险**：由上述模型直接计算。
+- **年感染风险**：\\(P_{\text{annual}} = 1 - (1 - P_i)^n\\)，其中 *n* 为年暴露次数。
+
+# 4. 评估结果
+
+## 4.1 单次感染风险
+```{r single-risk}
+if (!is.null(res$single_risk)) {
+  cat("**统计摘要**\n")
+  print(summary(res$single_risk))
+  ggplot(data.frame(Risk = res$single_risk), aes(Risk)) +
+    geom_density(fill = "steelblue", alpha = 0.4) +
+    scale_x_log10() +
+    labs(title = "单次暴露感染风险密度", x = "风险 (对数刻度)", y = "密度") +
+    theme_minimal()
+} else {
+  cat("未提供单次风险数据。")
+}
+```
+
+## 4.2 年感染风险
+```{r annual-risk}
+if (!is.null(res$annual_risk)) {
+  cat("**统计摘要**\n")
+  print(summary(res$annual_risk))
+  ggplot(data.frame(Risk = res$annual_risk), aes(Risk)) +
+    geom_density(fill = "forestgreen", alpha = 0.4) +
+    scale_x_log10() +
+    labs(title = "年感染风险密度", x = "年风险 (对数刻度)", y = "密度") +
+    theme_minimal()
+}
+```
+
+# 5. 敏感性分析
+
+## 5.1 Spearman 秩相关
+```{r sens-spearman, fig.height=4, fig.width=7}
+if (!is.null(res$sensitivity_1d)) {
+  tornado_plot(res$sensitivity_1d, title = "Spearman 敏感性")
+} else {
+  cat("未提供 Spearman 分析。")
+}
+```
+
+## 5.2 PRCC 偏秩相关系数
+```{r sens-prcc, fig.height=4, fig.width=7}
+if (!is.null(res$prcc)) {
+  tornado_plot(res$prcc, title = "PRCC 敏感性")
+}
+```
+
+## 5.3 Morris 基本效应
+```{r sens-morris, fig.height=4, fig.width=7}
+if (!is.null(res$morris)) {
+  tornado_plot(res$morris, title = "Morris 敏感性 (mu*)", log_scale = TRUE)
+}
+```
+
+## 5.4 Sobol' 方差分解
+```{r sens-sobol, fig.height=5, fig.width=7}
+if (!is.null(res$sobol)) {
+  sob <- res$sobol
+  S <- as.data.frame(sob$S) |> rownames_to_column("Variable") |> 
+    rename(original = original, min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+  T <- as.data.frame(sob$T) |> rownames_to_column("Variable") |> 
+    rename(original = original, min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+  combined <- bind_rows(S |> mutate(Type = "一阶效应"),
+                         T |> mutate(Type = "总效应"))
+  ggplot(combined, aes(x = reorder(Variable, original), y = original, fill = Type)) +
+    geom_col(position = position_dodge(0.7), width = 0.6) +
+    geom_errorbar(aes(ymin = pmax(0, min_ci), ymax = max_ci),
+                  position = position_dodge(0.7), width = 0.15, color = "grey30") +
+    coord_flip() +
+    scale_fill_manual(values = c("一阶效应" = "steelblue", "总效应" = "coral")) +
+    labs(title = "Sobol' 方差分解", y = "Sobol' 指数") +
+    theme_minimal()
+}
+```
+
+# 6. 不确定性分析
+
+## 6.1 参数不确定性传播
+```{r uncertainty-2d, fig.height=4, fig.width=7}
+if (!is.null(res$res2d)) {
+  rd <- res$res2d
+  cat("**平均风险的不确定性分布**\n")
+  p1 <- ggplot(data.frame(mean_risk = rd$mean_risk), aes(mean_risk)) +
+    geom_density(fill = "purple", alpha = 0.4) +
+    scale_x_log10() +
+    labs(x = "平均感染概率 (对数)", y = "密度") +
+    theme_minimal()
+  print(p1)
+  if (!is.null(rd$param_list)) {
+    param_name <- names(rd$param_list[[1]])[1]
+    param_vals <- sapply(rd$param_list, function(x) x[param_name])
+    cat("\n**参数 vs 平均风险**\n")
+    p2 <- ggplot(data.frame(param = param_vals, mean_risk = rd$mean_risk),
+                 aes(param, mean_risk)) +
+      geom_point(alpha = 0.5, color = "darkorange") +
+      geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
+      scale_x_log10() + scale_y_log10() +
+      labs(x = param_name, y = "平均风险") +
+      theme_minimal()
+    print(p2)
+  }
+}
+```
+
+# 7. 评估结论与建议
+
+在 `r scen$exposure_group` 于 `r scen$microenvironment` 微环境暴露于 `r scen$pathogen` 的情景下：
+- 单次感染风险中位数约为 `r if(!is.null(res$single_risk)) signif(median(res$single_risk), 3)`；
+- 年感染风险中位数约为 `r if(!is.null(res$annual_risk)) signif(median(res$annual_risk), 3)`。
+`r if(!is.null(res$annual_risk) && median(res$annual_risk) > 1e-4) "年风险中位数超过常用可接受基准（≤10⁻⁴），风险较高，建议采取控制措施。" else if(!is.null(res$annual_risk)) "年风险中位数低于常用可接受基准（≤10⁻⁴），风险处于可接受范围。"`
+
+# 8. 附件
+- 附件1：主要暴露参数与剂量‑反应参数汇总
+- 附件2：详细敏感性图表
+
+---
+**报告结束**
