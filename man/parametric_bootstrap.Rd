@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit_dr_model.R
 \name{parametric_bootstrap}
 \alias{parametric_bootstrap}
-\title{Parametric bootstrap for a dose‑response model}
+\title{Parametric bootstrap for a dose-response model}
 \usage{
 parametric_bootstrap(fit, nboot = 1000)
 }
@@ -16,6 +16,6 @@ A matrix with rows corresponding to bootstrap samples and columns
 to parameters.
 }
 \description{
-Parametric bootstrap for a dose‑response model
+Parametric bootstrap for a dose-response model
 }
 \keyword{internal}

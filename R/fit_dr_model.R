@@ -1,6 +1,8 @@
 # ===========================================================================
-# 剂量‑反应模型拟合与比较 (支持二项似然、bootstrap、模型选择)
+# Dose-response model fitting and comparison (supports binomial likelihood,
+# bootstrap, and model selection)
 # ===========================================================================
+
 #' Negative log-likelihood for exponential model
 #' @keywords internal
 exp_nll <- function(k, dose, n_total, n_dead) {
@@ -25,7 +27,7 @@ apb_nll <- function(par, dose, n_total, n_dead) {
 #' likelihood (when \code{total} is supplied) or least squares.
 #'
 #' @param dose Numeric vector of dose.
-#' @param response Numeric vector of response fractions (0–1) OR dead counts
+#' @param response Numeric vector of response fractions (0-1) OR dead counts
 #'   when \code{total} is supplied.
 #' @param total Optional integer vector of total subjects per dose.
 #' @param start Starting value for \code{k}. Default \code{1e-6}.
@@ -46,7 +48,7 @@ fit_exponential <- function(dose, response, total = NULL,
                               n_total = total, n_dead = n_dead)
     method_used <- "binomial MLE"
   } else {
-    warning("No 'total' supplied; using non‑linear least squares.")
+    warning("No 'total' supplied; using non-linear least squares.")
     obj <- function(k) sum((response - (1 - exp(-k * dose)))^2)
     opt <- stats::optimize(f = obj, interval = c(1e-12, 1))
     k_hat <- opt$minimum
@@ -96,7 +98,7 @@ fit_approx_beta_poisson <- function(dose, response, total = NULL,
                         method = method, hessian = TRUE, ...)
     method_used <- "binomial MLE"
   } else {
-    warning("No 'total' supplied; using non‑linear least squares.")
+    warning("No 'total' supplied; using non-linear least squares.")
     obj <- function(par) {
       alpha <- exp(par[1]); N50 <- exp(par[2])
       p <- 1 - (1 + dose * ((2^(1/alpha) - 1) / N50))^(-alpha)
@@ -127,9 +129,9 @@ fit_approx_beta_poisson <- function(dose, response, total = NULL,
 }
 
 
-#' Unified dose‑response model fitting with optional bootstrap
+#' Unified dose-response model fitting with optional bootstrap
 #'
-#' Fits either exponential or approximate beta‑Poisson model and, if requested,
+#' Fits either exponential or approximate beta-Poisson model and, if requested,
 #' conducts a parametric bootstrap to obtain parameter percentile confidence
 #' intervals.
 #'
@@ -167,7 +169,7 @@ fit_dr_model <- function(dose, response, total = NULL,
   fit
 }
 
-#' Parametric bootstrap for a dose‑response model
+#' Parametric bootstrap for a dose-response model
 #'
 #' @param fit A \code{"dr_fit"} object.
 #' @param nboot Number of bootstrap replicates.
@@ -193,7 +195,7 @@ parametric_bootstrap <- function(fit, nboot = 1000) {
     }
     dead_sim <- stats::rbinom(length(dose), size = total, prob = p)
 
-    # Re‑fit model
+    # Re-fit model
     tryCatch({
       if (fit$model == "exponential") {
         boot_fit <- fit_exponential(dose, dead_sim / total, total = total,
@@ -217,7 +219,7 @@ parametric_bootstrap <- function(fit, nboot = 1000) {
 
 #' @export
 summary.dr_fit <- function(object, ...) {
-  cat("Dose‑response model fit (", object$model, ")\n", sep = "")
+  cat("Dose-response model fit (", object$model, ")\n", sep = "")
   cat("Method: ", object$method, "\n")
   cat("-------------------------------------------\n")
   cat("Estimated parameters:\n")

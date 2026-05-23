@@ -35,19 +35,37 @@ summary.airqmra_scenario <- function(object, ...) {
 #' Update parameters of an existing scenario
 #'
 #' Takes an existing scenario object and changes one or more exposure-related
-#' parameters without re‑specifying all settings. Only the parameters that are
+#' parameters without re-specifying all settings. Only the parameters that are
 #' explicitly provided are updated; all others are kept as in the original
-#' scenario.  Dose‑response parameters cannot be changed via this function;
+#' scenario.  Dose-response parameters cannot be changed via this function;
 #' to modify them, create a new scenario with `new_scenario()`.
 #'
 #' @param scenario An `airqmra_scenario` object.
-#' @param pathogen_name,exposure_group,microenvironment,season,
-#'   activity_template,activity_intensity,C_air_dist,IR_dist,t_exp,
-#'   AG,deposition,survival,population_deposition See \code{\link{new_scenario}}.
-#'   If a parameter is \code{NULL} (default), the value from the original
-#'   scenario is kept.
+#' @param pathogen_name Character. A descriptive name for the scenario.
+#' @param exposure_group Character. Population classification for exposure
+#'   parameters (e.g., "Adult", "Male", "18Y-44Y").
+#' @param microenvironment Character. "Indoor" or "Outdoor".
+#' @param season Character. "Annual", "Spring & Autumn", "Summer", "Winter".
+#' @param activity_template Character. Activity template ID
+#'   (e.g., "office_worker").
+#' @param activity_intensity Character. Activity intensity
+#'   (e.g., "Light_intensity").
+#' @param C_air_dist Function. A function that generates air concentration
+#'   samples (copies/m^3).
+#' @param IR_dist Function. A function that generates inhalation rate
+#'   samples (m^3/h).
+#' @param t_exp Single numeric or function. Exposure duration in hours.
+#' @param AG Numeric or function. Fraction of deposited pathogens that
+#'   initiate infection.
+#' @param deposition Numeric or function. Fraction of inhaled particles that
+#'   deposit in the lung.
+#' @param survival Numeric or function. Fraction of airborne pathogens that
+#'   remain viable upon inhalation.
+#' @param population_deposition Character. Population group for deposition
+#'   data lookup (e.g., "Male", "Female", "Child", "Senior").
 #'
 #' @return An updated `airqmra_scenario` object.
+#'
 #' @export
 update_scenario <- function(scenario,
                             pathogen_name = NULL,
@@ -64,9 +82,9 @@ update_scenario <- function(scenario,
                             survival      = NULL,
                             population_deposition = NULL) {
 
-  new_scen <- scenario  # 复制原列表
+  new_scen <- scenario  # copy original list
 
-  # 更新标量字段
+  # update scalar fields
   if (!is.null(pathogen_name))     new_scen$pathogen <- pathogen_name
   if (!is.null(exposure_group))    new_scen$exposure_group <- exposure_group
   if (!is.null(microenvironment))  new_scen$microenvironment <- microenvironment
@@ -75,7 +93,7 @@ update_scenario <- function(scenario,
   if (!is.null(activity_intensity)) new_scen$activity_intensity <- activity_intensity
   if (!is.null(population_deposition)) new_scen$population_deposition <- population_deposition
 
-  # 更新分布函数（仅当用户明确提供时）
+  # update distribution functions (only when explicitly provided)
   if (!is.null(C_air_dist)) new_scen$C_air_dist <- C_air_dist
   if (!is.null(IR_dist))    new_scen$IR_dist <- IR_dist
   if (!is.null(t_exp))      new_scen$t_exp_dist <- if (is.function(t_exp)) t_exp else function(n) rep(t_exp, n)
@@ -92,9 +110,10 @@ update_scenario <- function(scenario,
     else new_scen$survival_dist <- function(n) rep(survival, n)
   }
 
-  # 如果更改了暴露相关参数，理论上需重新从数据库加载 IR/t_exp，
-  # 但这里我们保持简单：若用户未提供新的分布函数，则沿用原函数。
-  # 用户可通过提供自定义函数来覆盖。
+  # If exposure-related parameters are changed, one would ideally re-load
+  # IR/t_exp from the database. Here we keep it simple: if the user does not
+  # provide new distribution functions, the originals are kept.
+  # Users can override by supplying custom functions.
 
   class(new_scen) <- c("airqmra_scenario", "list")
   new_scen
@@ -117,16 +136,16 @@ summary.airqmra_result <- function(object, ...) {
 
 #' @export
 plot.airqmra_result <- function(x, ...) {
-  # Use the already defined plot.airqmra_2d? No – create a simple density plot
+  # simple density plot
   if (requireNamespace("ggplot2", quietly = TRUE)) {
     df <- data.frame(Risk = x)
     ggplot2::ggplot(df, ggplot2::aes(x = Risk)) +
       ggplot2::geom_density(fill = "steelblue", alpha = 0.4) +
       ggplot2::scale_x_log10() +
-      ggplot2::labs(title = "Single‑exposure risk distribution", x = "Risk", y = "Density") +
+      ggplot2::labs(title = "Single-exposure risk distribution", x = "Risk", y = "Density") +
       ggplot2::theme_light()
   } else {
-    hist(x, main = "Single‑exposure risk", xlab = "Risk", col = "steelblue")
+    hist(x, main = "Single-exposure risk", xlab = "Risk", col = "steelblue")
   }
 }
 

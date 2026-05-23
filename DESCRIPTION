@@ -1,9 +1,14 @@
 Package: airqmra
-Title: What the Package Does (One Line, Title Case)
+Title: Inhalation Quantitative Microbial Risk Assessment
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person("Gaoshan", "Zhang", , "2024029025@chd.edu.cn", role = c("aut", "cre"))
+Description: A comprehensive R package for quantitative microbial risk assessment (QMRA) 
+    of airborne pathogens. It integrates Chinese population exposure databases, 
+    dose-response models, one- and two-dimensional Monte Carlo simulation, 
+    annual risk calculation, and advanced sensitivity analysis (Spearman, PRCC, 
+    Morris, Sobol'). The package also includes an interactive Shiny application 
+    and automated report generation following national technical guidelines.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -13,13 +18,14 @@ Imports:
     fitdistrplus,
     hypergeo,
     numDeriv,
+    scales,
     sensitivity,
-    shiny,
-    shinythemes
+    shiny
 Depends: 
     R (>= 3.5)
 LazyData: true
 Suggests: 
     ggplot2,
     knitr,
-    rmarkdown
+    rmarkdown,
+    shinythemes

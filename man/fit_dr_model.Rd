@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit_dr_model.R
 \name{fit_dr_model}
 \alias{fit_dr_model}
-\title{Unified dose‑response model fitting with optional bootstrap}
+\title{Unified dose-response model fitting with optional bootstrap}
 \usage{
 fit_dr_model(
   dose,
@@ -29,7 +29,7 @@ An object of class \code{"dr_fit"} with additional element
 performed.
 }
 \description{
-Fits either exponential or approximate beta‑Poisson model and, if requested,
+Fits either exponential or approximate beta-Poisson model and, if requested,
 conducts a parametric bootstrap to obtain parameter percentile confidence
 intervals.
 }

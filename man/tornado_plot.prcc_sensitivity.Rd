@@ -7,7 +7,8 @@
 \method{tornado_plot}{prcc_sensitivity}(
   sens,
   title = "PRCC Sensitivity",
-  xlab = "Partial Rank Correlation"
+  xlab = "Partial Rank Correlation",
+  ...
 )
 }
 \arguments{
@@ -16,6 +17,8 @@
 \item{title}{Plot title.}
 
 \item{xlab}{X-axis label.}
+
+\item{...}{Additional arguments passed to other methods.}
 }
 \value{
 A ggplot2 object.

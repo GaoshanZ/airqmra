@@ -8,7 +8,8 @@
   sens,
   title = "Morris Sensitivity (mu*)",
   xlab = expression(mu * "*"),
-  log_scale = TRUE
+  log_scale = TRUE,
+  ...
 )
 }
 \arguments{
@@ -20,6 +21,8 @@
 
 \item{log_scale}{Logical. If \code{TRUE} (default), the x‑axis is
 log10‑transformed.}
+
+\item{...}{Additional arguments passed to other methods.}
 }
 \value{
 A ggplot2 object.

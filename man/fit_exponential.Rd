@@ -9,7 +9,7 @@ fit_exponential(dose, response, total = NULL, start = 1e-06, ...)
 \arguments{
 \item{dose}{Numeric vector of dose.}
 
-\item{response}{Numeric vector of response fractions (0–1) OR dead counts
+\item{response}{Numeric vector of response fractions (0-1) OR dead counts
 when \code{total} is supplied.}
 
 \item{total}{Optional integer vector of total subjects per dose.}

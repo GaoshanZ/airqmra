@@ -8,14 +8,15 @@ import_concentration(
   x,
   col = NULL,
   method = c("empirical", "lognormal", "auto"),
+  sep = NULL,
   ...
 )
 }
 \arguments{
 \item{x}{A file path (character) or a data frame containing concentration data.}
 
-\item{col}{Column name or index (if data frame/file with header). If \code{NULL}
-(default), the first numeric column is used automatically.}
+\item{col}{Column name or index. If \code{NULL} (default), the first numeric
+column is used automatically.}
 
 \item{method}{Fitting method:
 \itemize{
@@ -25,27 +26,29 @@ import_concentration(
 Gamma, and Weibull based on AIC.
 }}
 
-\item{...}{Additional arguments passed to \code{read.csv} (when \code{x} is a
-file path).}
+\item{sep}{Field separator (only used when \code{x} is a file path). Defaults
+to \code{","} for CSV files; for \code{.txt} files it defaults to \code{"\\t"}.
+You can override this manually.}
+
+\item{...}{Additional arguments passed to \code{read.table}.}
 }
 \value{
 A function with signature \code{function(n)} that generates \code{n}
-random concentration values (copies/m³). The function has an attribute
+random concentration values (copies/m^3). The function has an attribute
 \code{"distribution"} containing fitted distribution details.
 }
 \description{
-Reads concentration data from a CSV file or data frame, fits a distribution,
-and returns a random number generator function that can be directly passed to
-\code{C_air_dist} in \code{\link{new_scenario}}.
+Reads concentration data from a CSV or TXT file or a data frame, fits a
+distribution, and returns a random number generator function that can be
+directly passed to \code{C_air_dist} in \code{\link{new_scenario}}.
 }
 \examples{
-# From a CSV file (assumes column "conc")
-conc_gen <- import_concentration("data/field_samples.csv", col = "conc")
-scen <- new_scenario(..., C_air_dist = conc_gen)
-
-# From a data frame
+# From a data frame (in-memory)
 mydata <- data.frame(conc = c(50, 42, 67, 31))
-conc_gen <- import_concentration(mydata, method = "lognormal")
-conc_gen(10)
+conc_gen <- import_concentration(mydata, col = "conc", method = "lognormal")
+conc_gen(5)
 
+# Empirical bootstrap
+conc_gen_emp <- import_concentration(mydata, method = "empirical")
+print(conc_gen_emp)
 }

@@ -263,6 +263,7 @@ plot.morris_airqmra <- function(x, ...) {
 #' @param sens A \code{morris_airqmra} object.
 #' @param title Plot title.
 #' @param xlab X-axis label (defaults to \eqn{\mu^*}).
+#' @param ... Additional arguments passed to other methods.
 #' @param log_scale Logical. If \code{TRUE} (default), the x‑axis is
 #'   log10‑transformed.
 #'
@@ -271,7 +272,7 @@ plot.morris_airqmra <- function(x, ...) {
 tornado_plot.morris_airqmra <- function(sens,
                                         title = "Morris Sensitivity (mu*)",
                                         xlab = expression(mu*"*"),
-                                        log_scale = TRUE) {
+                                        log_scale = TRUE, ...) {
   ee <- sens$ee
   df <- data.frame(Variable = rownames(ee), mu_star = ee[, "mu.star"])
 
@@ -304,11 +305,12 @@ print.morris_airqmra <- function(x, ...) {
 #' @param sens A \code{prcc_sensitivity} object.
 #' @param title Plot title.
 #' @param xlab X-axis label.
+#' @param ... Additional arguments passed to other methods.
 #'
 #' @return A ggplot2 object.
 #' @export
 tornado_plot.prcc_sensitivity <- function(sens, title = "PRCC Sensitivity",
-                                          xlab = "Partial Rank Correlation") {
+                                          xlab = "Partial Rank Correlation", ...) {
   ranking <- sens$ranking
 
   ci_df <- data.frame(

@@ -6,6 +6,11 @@
 \usage{
 \method{print}{airqmra_concentration}(x, ...)
 }
+\arguments{
+\item{x}{An object of class \code{airqmra_concentration}.}
+
+\item{...}{Further arguments passed to or from other methods.}
+}
 \description{
 Print method for concentration generator
 }

@@ -24,18 +24,48 @@ update_scenario(
 \arguments{
 \item{scenario}{An \code{airqmra_scenario} object.}
 
-\item{pathogen_name, exposure_group, microenvironment, season, }{activity_template,activity_intensity,C_air_dist,IR_dist,t_exp,
-AG,deposition,survival,population_deposition See \code{\link{new_scenario}}.
-If a parameter is \code{NULL} (default), the value from the original
-scenario is kept.}
+\item{pathogen_name}{Character. A descriptive name for the scenario.}
+
+\item{exposure_group}{Character. Population classification for exposure
+parameters (e.g., "Adult", "Male", "18Y-44Y").}
+
+\item{microenvironment}{Character. "Indoor" or "Outdoor".}
+
+\item{season}{Character. "Annual", "Spring & Autumn", "Summer", "Winter".}
+
+\item{activity_template}{Character. Activity template ID
+(e.g., "office_worker").}
+
+\item{activity_intensity}{Character. Activity intensity
+(e.g., "Light_intensity").}
+
+\item{C_air_dist}{Function. A function that generates air concentration
+samples (copies/m^3).}
+
+\item{IR_dist}{Function. A function that generates inhalation rate
+samples (m^3/h).}
+
+\item{t_exp}{Single numeric or function. Exposure duration in hours.}
+
+\item{AG}{Numeric or function. Fraction of deposited pathogens that
+initiate infection.}
+
+\item{deposition}{Numeric or function. Fraction of inhaled particles that
+deposit in the lung.}
+
+\item{survival}{Numeric or function. Fraction of airborne pathogens that
+remain viable upon inhalation.}
+
+\item{population_deposition}{Character. Population group for deposition
+data lookup (e.g., "Male", "Female", "Child", "Senior").}
 }
 \value{
 An updated \code{airqmra_scenario} object.
 }
 \description{
 Takes an existing scenario object and changes one or more exposure-related
-parameters without re‑specifying all settings. Only the parameters that are
+parameters without re-specifying all settings. Only the parameters that are
 explicitly provided are updated; all others are kept as in the original
-scenario.  Dose‑response parameters cannot be changed via this function;
+scenario.  Dose-response parameters cannot be changed via this function;
 to modify them, create a new scenario with \code{new_scenario()}.
 }

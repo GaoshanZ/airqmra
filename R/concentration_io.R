@@ -1,12 +1,12 @@
 #' Import and fit concentration data
 #'
-#' Reads concentration data from a CSV file or data frame, fits a distribution,
-#' and returns a random number generator function that can be directly passed to
-#' \code{C_air_dist} in \code{\link{new_scenario}}.
+#' Reads concentration data from a CSV or TXT file or a data frame, fits a
+#' distribution, and returns a random number generator function that can be
+#' directly passed to \code{C_air_dist} in \code{\link{new_scenario}}.
 #'
 #' @param x A file path (character) or a data frame containing concentration data.
-#' @param col Column name or index (if data frame/file with header). If \code{NULL}
-#'   (default), the first numeric column is used automatically.
+#' @param col Column name or index. If \code{NULL} (default), the first numeric
+#'   column is used automatically.
 #' @param method Fitting method:
 #'   \itemize{
 #'     \item \code{"empirical"}: bootstrap sampling from the observed values.
@@ -14,47 +14,54 @@
 #'     \item \code{"auto"}: automatically select the best among lognormal,
 #'           Gamma, and Weibull based on AIC.
 #'   }
-#' @param ... Additional arguments passed to \code{read.csv} (when \code{x} is a
-#'   file path).
+#' @param sep Field separator (only used when \code{x} is a file path). Defaults
+#'   to \code{","} for CSV files; for \code{.txt} files it defaults to \code{"\\t"}.
+#'   You can override this manually.
+#' @param ... Additional arguments passed to \code{read.table}.
 #'
 #' @return A function with signature \code{function(n)} that generates \code{n}
-#'   random concentration values (copies/m³). The function has an attribute
+#'   random concentration values (copies/m^3). The function has an attribute
 #'   \code{"distribution"} containing fitted distribution details.
+#' @export
 #'
 #' @examples
-#' # From a CSV file (assumes column "conc")
-#' conc_gen <- import_concentration("data/field_samples.csv", col = "conc")
-#' scen <- new_scenario(..., C_air_dist = conc_gen)
-#'
-#' # From a data frame
+#' # From a data frame (in-memory)
 #' mydata <- data.frame(conc = c(50, 42, 67, 31))
-#' conc_gen <- import_concentration(mydata, method = "lognormal")
-#' conc_gen(10)
+#' conc_gen <- import_concentration(mydata, col = "conc", method = "lognormal")
+#' conc_gen(5)
 #'
-#' @export
-import_concentration <- function(x, col = NULL, method = c("empirical", "lognormal", "auto"), ...) {
+#' # Empirical bootstrap
+#' conc_gen_emp <- import_concentration(mydata, method = "empirical")
+#' print(conc_gen_emp)
+import_concentration <- function(x, col = NULL, method = c("empirical", "lognormal", "auto"),
+                                 sep = NULL, ...) {
   method <- match.arg(method)
 
-  # ---- 1. 读入数据 ----
+  # 1. Read data
   if (is.character(x)) {
-    data <- read.csv(x, stringsAsFactors = FALSE, ...)
+    if (is.null(sep)) {
+      if (grepl("\\.txt$", x, ignore.case = TRUE)) {
+        sep <- "\t"
+        message("Detected .txt file, using tab as separator.")
+      } else {
+        sep <- ","
+      }
+    }
+    data <- read.table(x, header = TRUE, sep = sep, stringsAsFactors = FALSE, ...)
   } else if (is.data.frame(x)) {
     data <- x
   } else {
     stop("'x' must be a file path or a data frame.")
   }
 
-  # ---- 2. 提取浓度列 ----
+  # 2. Extract concentration column
   if (is.null(col)) {
-    # 自动寻找第一个数值列
     num_cols <- sapply(data, is.numeric)
     if (!any(num_cols)) stop("No numeric column found in the data.")
     col <- names(which(num_cols))[1]
     message("Using column '", col, "' as concentration.")
   } else {
-    if (is.numeric(col)) {
-      col <- names(data)[col]
-    }
+    if (is.numeric(col)) col <- names(data)[col]
     if (!col %in% names(data)) stop("Column '", col, "' not found in the data.")
   }
 
@@ -63,7 +70,7 @@ import_concentration <- function(x, col = NULL, method = c("empirical", "lognorm
   if (any(conc < 0)) stop("Concentration values must be non-negative.")
   if (length(conc) < 3) stop("Need at least 3 concentration values for fitting.")
 
-  # ---- 3. 分布拟合与生成器构建 ----
+  # 3. Distribution fitting and generator construction
   dist_info <- list()
 
   if (method == "empirical") {
@@ -71,7 +78,6 @@ import_concentration <- function(x, col = NULL, method = c("empirical", "lognorm
     dist_info$type <- "empirical"
     dist_info$data <- conc
   } else if (method == "lognormal") {
-    # 要求全部为正数
     if (any(conc == 0)) stop("Lognormal fitting requires all concentrations > 0.")
     fit <- fitdistrplus::fitdist(conc, "lnorm")
     mlog <- fit$estimate["meanlog"]
@@ -103,13 +109,14 @@ import_concentration <- function(x, col = NULL, method = c("empirical", "lognorm
     dist_info$AIC <- best_fit$aic
   }
 
-  # 将分布信息附加为函数属性
   attr(f, "distribution") <- dist_info
   class(f) <- c("airqmra_concentration", class(f))
   return(f)
 }
 
 #' Print method for concentration generator
+#' @param x An object of class `airqmra_concentration`.
+#' @param ... Further arguments passed to or from other methods.
 #' @export
 print.airqmra_concentration <- function(x, ...) {
   info <- attr(x, "distribution")
