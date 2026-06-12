@@ -2,6 +2,7 @@
 #' @importFrom graphics barplot hist lines text
 #' @importFrom utils capture.output menu read.csv read.table
 #' @importFrom utils globalVariables
+#' @importFrom stats predict
 NULL
 
 # Declare non-standard evaluation variables used in ggplot2 aesthetics

@@ -40,6 +40,9 @@
 #'   If FALSE (default), point estimates are used.
 #' @param fallback Character vector. Fallback classifications for exposure data,
 #'   in priority order. Default `c("Adult")`.
+#' @param dr_generator Function. A user-provided dose‑response parameter generator
+#'   that returns a list with `type` and parameter vectors. If provided, all other
+#'   dose‑response arguments (pathogen_id, dr_pars, use_uncertainty) are ignored.
 #'
 #' @return An object of class `airqmra_scenario`, which is a list containing the
 #'   random generator functions for all inputs, dose‑response parameters, and
@@ -65,14 +68,24 @@ new_scenario <- function(pathogen_name = NULL,
                          survival      = NULL,
                          population_deposition = "Male",
                          use_uncertainty = FALSE,
-                         fallback      = c("Adult")) {
+                         fallback      = c("Adult"),
+                         dr_generator  = NULL) {
 
   # ---------- dose-response parameter handling ----------
-  if (!is.null(dr_pars)) {
+  if (!is.null(dr_generator)) {
+    # 用户提供了自定义生成器，直接使用，跳过数据库和手动参数
+    dr_pars <- NULL
+    if (!is.null(pathogen_id)) {
+      message("'dr_generator' provided; ignoring 'pathogen_id'.")
+    }
+    if (!is.null(dr_pars)) {
+      warning("'dr_pars' is ignored because 'dr_generator' was provided.")
+    }
+  } else if (!is.null(dr_pars)) {
+    # 用户提供了固定参数
     if (!is.null(pathogen_id)) {
       message("Both 'pathogen_id' and 'dr_pars' provided. Using 'dr_pars' and ignoring 'pathogen_id'.")
     }
-    dr_generator <- NULL
   } else {
     if (is.null(pathogen_id)) {
       stop("Either 'dr_pars' or 'pathogen_id' must be provided.")

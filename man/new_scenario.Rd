@@ -22,7 +22,8 @@ new_scenario(
   survival = NULL,
   population_deposition = "Male",
   use_uncertainty = FALSE,
-  fallback = c("Adult")
+  fallback = c("Adult"),
+  dr_generator = NULL
 )
 }
 \arguments{
@@ -83,6 +84,10 @@ If FALSE (default), point estimates are used.}
 
 \item{fallback}{Character vector. Fallback classifications for exposure data,
 in priority order. Default \code{c("Adult")}.}
+
+\item{dr_generator}{Function. A user-provided dose‑response parameter generator
+that returns a list with \code{type} and parameter vectors. If provided, all other
+dose‑response arguments (pathogen_id, dr_pars, use_uncertainty) are ignored.}
 }
 \value{
 An object of class \code{airqmra_scenario}, which is a list containing the
