@@ -70,6 +70,23 @@ generate_risk_report(scen, list(single_risk = single_risk,
 - 指数模型、精确 β‑泊松模型（数值安全保护）、基于 N₅₀ 的近似 β‑泊松模型。
 - **模型拟合模块**：支持从原始实验数据（剂量‑反应表）进行最大似然拟合、bootstrap 参数分位数、模型比较（似然比检验）。
 
+### 🧬 基因组驱动的剂量‑反应参数预测 (概念验证)
+`airqmra` 首次整合了从细菌基因组注释预测剂量‑反应模型参数 α 的功能。该模块基于 adhesion 基因密度（粘附基因数 / 基因组长度 Mb）与 α 参数的线性回归模型，训练集为 10 株典型病原菌。
+**主要函数**：
+- `compute_adhesion_density(vfdb_file, genome_fasta, ...)` – 从 VFDB 注释文件和基因组 FASTA 计算 adhesion 密度
+- `predict_alpha_from_genome(adhesion_per_mb)` – 基于预训练模型预测 α 及其不确定性
+- `make_prediction_generator(pred)` – 将预测结果转换为可直接用于 `new_scenario()` 的 `dr_generator`
+
+**使用示例**：
+```r
+# 计算 adhesion 密度
+adhesion_dens <- compute_adhesion_density("strain_vfdb.tsv", "strain.fna",
+                                         has_header = FALSE)
+
+# 预测 α
+pred <- predict_alpha_from_genome(adhesion_dens)
+print(pred)
+
 ### 🎲 蒙特卡洛模拟
 - **一维模拟**：传播暴露变异性（浓度、吸入速率、时间、沉积率、存活率）。
 - **二维模拟**：分离参数不确定性（k, α, β, N₅₀）与人群变异性，输出风险均值的置信区间及综合风险分布。
