@@ -1,22 +1,22 @@
-# airqmra: 吸入暴露定量微生物风险评估 R 包
+# airqmra: Inhalation Quantitative Microbial Risk Assessment in R
 
-`airqmra` 是一个用于**大气环境生物气溶胶感染风险评估**的专业 R 包。
-它集成了中国人群暴露参数数据库、多病原剂量‑反应模型、一维与二维蒙特卡洛模拟、年风险与疾病负担计算，以及多层次敏感性分析工具（Spearman、PRCC、Morris、Sobol'）。
-包内同时提供了交互式 Shiny 网页应用和符合团体标准（T/CSES XXXX-XXXX）的自动化报告生成。
+`airqmra` is a professional R package designed for **inhalation infection risk assessment of bioaerosols in the atmospheric environment**.
+It integrates a Chinese population exposure factor database, multi‑pathogen dose‑response models, one‑ and two‑dimensional Monte Carlo simulation, annual risk and disease burden calculation, and a comprehensive sensitivity analysis toolkit (Spearman, PRCC, Morris, Sobol’).
+The package also provides an interactive Shiny web application and automated report generation following the national technical guideline (T/CSES XXXX‑XXXX).
 
-## 安装
+## Installation
 
 ```r
 if (!require("remotes")) install.packages("remotes")
 remotes::install_github("GaoshanZ/airqmra")
 ```
 
-## 快速示例
+## Quick start
 
 ```r
 library(airqmra)
 
-# 创建暴露场景：成人室外吸入嗜肺军团菌
+# Create an exposure scenario: adult outdoor inhalation of Legionella pneumophila
 scen <- new_scenario(
   pathogen_id         = "legionella pneumophila",
   exposure_group      = "Adult",
@@ -25,11 +25,11 @@ scen <- new_scenario(
   use_uncertainty     = FALSE
 )
 
-# 一维蒙特卡洛模拟（仅变异性）
+# 1D Monte Carlo simulation (variability only)
 single_risk <- run_qmra_1d(scen, n_iter = 5000)
 annual      <- annual_risk(single_risk, frequency = 20)
 
-# 二维蒙特卡洛（变异性 + 参数不确定性）
+# 2D Monte Carlo (variability + parameter uncertainty)
 scen_unc <- new_scenario(
   pathogen_id         = "legionella pneumophila",
   exposure_group      = "Adult",
@@ -39,7 +39,7 @@ scen_unc <- new_scenario(
 )
 res2d <- run_qmra_2d(scen_unc, n_var = 2000, n_unc = 500, frequency = 20)
 
-# 敏感性分析
+# Sensitivity analyses
 sens_spearman <- sensitivity_1d(scen, n_iter = 3000)
 tornado_plot(sens_spearman, title = "Spearman sensitivity")
 
@@ -52,89 +52,100 @@ tornado_plot(mor, title = "Morris sensitivity (mu*)", log_scale = TRUE)
 sobol_res <- sobol_sensitivity(scen_unc, n = 1000)
 plot(sobol_res)
 
-# 生成符合团标的风险评估报告
+# Generate a standard‑compliant risk assessment report
 generate_risk_report(scen, list(single_risk = single_risk,
                                 annual_risk  = annual,
                                 sensitivity_1d = sens_spearman),
-                     language = "zh")
+                     language = "en")
 ```
 
-## 主要功能
+## Key features
 
-### 📦 内置数据库
-- 15+ 种常见病原体的剂量‑反应参数（指数、精确 β‑泊松、近似 β‑泊松），包含不确定性分布（对数正态）。
-- 中国人群暴露参数：长期/短期呼吸速率、室内外时间分配、肺部沉积率、气溶胶存活率、活动情景模板。
-- 所有参数支持外部 CSV 驱动，用户可自由扩展。
+### 📦 Built‑in databases
+- Dose‑response parameters for over 15 common pathogens (exponential, exact beta‑Poisson, approximate beta‑Poisson), including log‑normal uncertainty distributions.
+- Chinese population exposure factors: long‑term / short‑term inhalation rates, indoor/outdoor time‑activity patterns, pulmonary deposition fractions, airborne survival rates, and activity‑template scenarios.
+- All parameters are CSV‑driven and can be extended by the user.
 
-### 🔬 剂量‑反应模型
-- 指数模型、精确 β‑泊松模型（数值安全保护）、基于 N₅₀ 的近似 β‑泊松模型。
-- **模型拟合模块**：支持从原始实验数据（剂量‑反应表）进行最大似然拟合、bootstrap 参数分位数、模型比较（似然比检验）。
+### 🔬 Dose‑response models
+- Exponential model, exact beta‑Poisson model (with numerical safeguards), and approximate beta‑Poisson model (N₅₀‑based).
+- **Model‑fitting module**: maximum likelihood estimation from raw dose‑response data, bootstrap percentile confidence intervals, and likelihood‑ratio model comparison.
 
-### 🧬 基因组驱动的剂量‑反应参数预测 (概念验证)
-`airqmra` 首次整合了从细菌基因组注释预测剂量‑反应模型参数 α 的功能。该模块基于 adhesion 基因密度（粘附基因数 / 基因组长度 Mb）与 α 参数的线性回归模型，训练集为 10 株典型病原菌。
-**主要函数**：
-- `compute_adhesion_density(vfdb_file, genome_fasta, ...)` – 从 VFDB 注释文件和基因组 FASTA 计算 adhesion 密度
-- `predict_alpha_from_genome(adhesion_per_mb)` – 基于预训练模型预测 α 及其不确定性
-- `make_prediction_generator(pred)` – 将预测结果转换为可直接用于 `new_scenario()` 的 `dr_generator`
+### 🧬 Genome‑informed dose‑response prediction (proof‑of‑concept)
+`airqmra` incorporates a first‑of‑its‑kind module that predicts the α parameter of the approximate beta‑Poisson model from bacterial genome annotations. The prediction relies on a linear regression between adhesion gene density (number of adhesion genes per million base pairs) and α, trained on 10 representative pathogenic strains.
 
-**使用示例**：
+**Key functions**:
+- `compute_adhesion_density(vfdb_file, genome_fasta, ...)` – compute adhesion gene density from a VFDB annotation file and a genome FASTA.
+- `predict_alpha_from_genome(adhesion_per_mb)` – predict α and its uncertainty using the pre‑trained model.
+- `make_prediction_generator(pred)` – convert the prediction into a `dr_generator` suitable for `new_scenario()`.
+
+**Example**:
 ```r
-# 计算 adhesion 密度
+# compute adhesion density
 adhesion_dens <- compute_adhesion_density("strain_vfdb.tsv", "strain.fna",
                                          has_header = FALSE)
-
-# 预测 α
+# predict alpha
 pred <- predict_alpha_from_genome(adhesion_dens)
 print(pred)
 
-### 🎲 蒙特卡洛模拟
-- **一维模拟**：传播暴露变异性（浓度、吸入速率、时间、沉积率、存活率）。
-- **二维模拟**：分离参数不确定性（k, α, β, N₅₀）与人群变异性，输出风险均值的置信区间及综合风险分布。
-- 年感染风险计算（支持固定频率或频率分布）。
+# create a custom dose‑response generator
+gen <- make_prediction_generator(pred)
+scen <- new_scenario(pathogen_name = "Predicted strain",
+                     exposure_group = "Adult",
+                     microenvironment = "Outdoor",
+                     dr_generator = gen)
+```
 
-### 📊 敏感性分析
-- **Spearman 秩相关**（1D 变异性 / 2D 参数不确定性 / 全局混合）。
-- **PRCC（偏秩相关系数）**：控制其他变量后的单调影响，含 bootstrap 置信区间。
-- **Morris 基本效应法**：自包含实现，筛选重要变量及交互效应。
-- **Sobol' 方差分解**（基于 sobol2007 算法）：一阶与总效应指数，完整主效应与交互效应量化。
-- 飓风图 (`tornado_plot`) 及标准散点图可视化。
+> **Note**: The current model is a proof‑of‑concept with limited training data. It is applicable to high‑adhesion, low‑invasiveness pathogens (e.g., *E. coli*, *K. aerogenes*). Predictions should be interpreted with caution. This functionality is available only from the R command line and is not yet integrated into the Shiny application.
 
-### 🌐 数据交互与验证
-- 浓度数据导入：支持 CSV/TXT，自动拟合分布（对数正态、Gamma、Weibull），并提供数据诊断。
-- 场景检查：`check_scenario()` 自动评估参数合理性。
-- 灵活的 `update_scenario()` 方法，便于批量情景分析。
+### 🎲 Monte Carlo simulation
+- **1D simulation**: propagates exposure variability (concentration, inhalation rate, exposure time, deposition fraction, survival fraction).
+- **2D simulation**: separates parameter uncertainty (k, α, β, N₅₀) from population variability; outputs confidence intervals for the mean risk and the combined risk distribution.
+- Annual infection risk calculation (supports fixed frequencies or frequency distributions).
 
-### 📄 报告生成
-- 一键生成中英文 HTML/Word/PDF 风险评估报告，严格遵循《大气环境生物气溶胶健康风险评估技术方法指南》(T/CSES XXXX-XXXX) 框架。
-- 报告内容自适应：根据用户提供的分析结果，自动展示 Spearman、PRCC、Morris、Sobol' 及二维不确定性分析。
+### 📊 Sensitivity analysis
+- **Spearman rank correlation** (1D variability / 2D parameter uncertainty / global mixed).
+- **PRCC (Partial Rank Correlation Coefficient)**: monotonic influence after controlling for other variables, with bootstrap confidence intervals.
+- **Morris elementary effects**: self‑contained implementation for screening important variables and interactions.
+- **Sobol’ variance decomposition** (based on the sobol2007 algorithm): first‑order and total‑effect indices with full interaction quantification.
+- Tornado charts (`tornado_plot`) and standard scatter plots.
 
-### 🖥️ Shiny 交互界面
-- 内置完整的网页应用 (`run_shiny()`)，支持场景设置、一维/二维模拟、多敏感性分析、情景比较和报告下载。
+### 🌐 Data import and validation
+- Concentration data import: supports CSV/TXT files, automatic distribution fitting (lognormal, gamma, Weibull), and data diagnostics.
+- Scenario validation: `check_scenario()` automatically evaluates parameter plausibility.
+- Flexible `update_scenario()` method for batch scenario analyses.
 
-## 支持的部分病原体
+### 📄 Report generation
+- One‑click generation of bilingual (Chinese/English) risk assessment reports in HTML, Word, or PDF format, strictly following the framework of “Technical Guideline for Health Risk Assessment of Bioaerosols in the Atmospheric Environment” (T/CSES XXXX‑XXXX).
+- Adaptive content: the report automatically includes Spearman, PRCC, Morris, Sobol’, and 2D uncertainty analyses when the corresponding results are provided.
 
-| 病原体 | 模型 | 点估计参数 |
-|--------|------|-------------|
-| 嗜肺军团菌 | 指数 | k = 4.99×10⁻⁵ |
-| 金黄色葡萄球菌 | 指数 | k = 7.64×10⁻⁸ |
-| 铜绿假单胞菌 | 近似 β‑泊松 | α = 0.19, N₅₀ = 1.85×10⁴ |
-| 烟曲霉菌 | 精确 β‑泊松 | α = 0.09, β = 14 |
-| 流感病毒 | 近似 β‑泊松 | α = 0.581, N₅₀ = 9.45×10⁵ |
+### 🖥️ Shiny interactive interface
+- A full‑featured web application (`run_shiny()`) supporting scenario configuration, 1D/2D simulation, multiple sensitivity analyses, scenario comparison, and report download.
 
-（完整列表请参见包内 `pathogen_db` 数据集）
+## Selected pathogens
 
-## 依赖
-- `dplyr`, `tidyr`, `readr` – 数据处理
-- `hypergeo` – 精确 β‑泊松模型
-- `sensitivity` – Sobol' 分析
-- `shiny`, `shinythemes` – 交互界面
-- `rmarkdown`, `knitr` – 报告生成
-- `ggplot2`, `scales` – 可视化
+| Pathogen | Model | Point‑estimate parameters |
+|----------|-------|---------------------------|
+| *Legionella pneumophila* | exponential | k = 4.99×10⁻⁵ |
+| *Staphylococcus aureus* | exponential | k = 7.64×10⁻⁸ |
+| *Pseudomonas aeruginosa* | approx. beta‑Poisson | α = 0.19, N₅₀ = 1.85×10⁴ |
+| *Aspergillus fumigatus* | exact beta‑Poisson | α = 0.09, β = 14 |
+| *Influenza virus* | approx. beta‑Poisson | α = 0.581, N₅₀ = 9.45×10⁵ |
+
+(For the full list see the built‑in `pathogen_db` dataset.)
+
+## Dependencies
+
+- `dplyr`, `tidyr`, `readr` – data manipulation
+- `hypergeo` – exact beta‑Poisson model
+- `sensitivity` – Sobol’ analysis
+- `shiny`, `shinythemes` – interactive interface
+- `rmarkdown`, `knitr` – report generation
+- `ggplot2`, `scales` – visualization
 - R ≥ 4.0
 
-## 引用
+## Citation
 
-若使用本包进行研究，请引用：
+If you use `airqmra` in your research, please cite:
 
 ```bibtex
 @software{airqmra,
@@ -146,15 +157,15 @@ print(pred)
 }
 ```
 
-暴露参数及病原体数据主要来源：
+Main data sources for exposure factors and pathogen parameters:
 - Duan, X.L. et al. (2014, 2016) *Highlights of the Chinese Exposure Factors Handbook*.
-- [QMRA Wiki](https://qmrawiki.msu.edu) 及公开文献。
+- [QMRA Wiki](https://qmrawiki.msu.edu) and published literature.
 
-## 贡献与反馈
+## Contributions and feedback
 
-欢迎通过 [GitHub Issues](https://github.com/GaoshanZ/airqmra/issues) 提交问题或建议。
-作者邮箱：2024029025@chd.edu.cn
+Bug reports and suggestions are welcome via [GitHub Issues](https://github.com/GaoshanZ/airqmra/issues).
+Author email: 2024029025@chd.edu.cn
 
 ---
 
-**让风险分析更透明，从黑箱走向科学可重复！**
+**Making risk analysis transparent – from black box to scientific reproducibility!**
