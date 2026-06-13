@@ -127,12 +127,12 @@ ui <- navbarPage(
            fluidRow(
              column(4, numericInput("morris_levels", "Levels", value = 8, min = 4)),
              column(4, numericInput("morris_traj", "Trajectories", value = 30, min = 10)),
-             column(4, checkboxInput("morris_global", "Include parameter k", value = FALSE))
+             column(4, checkboxInput("morris_global", "Include dose‑response parameters", value = FALSE))
            ),
            actionButton("run_morris", "Run Morris Analysis", icon = icon("diagram-project")),
            plotOutput("morris_plot"),
            hr(),
-           h4("Global Sensitivity (Variability + Parameter k)"),
+           h4("Global Sensitivity (Variability + Parameter)"),
            p("Requires 2D simulation with recorded inputs. Click 'Prepare Data' first, then run analyses."),
            actionButton("run_global_prep", "Prepare Global Sensitivity Data", icon = icon("database")),
            br(), br(),
@@ -183,6 +183,10 @@ server <- function(input, output, session) {
   # ---------- Custom publication-ready tornado plots ----------
   custom_tornado <- function(ranking, title, xlab = "Correlation") {
     val_col <- if ("PRCC" %in% names(ranking)) "PRCC" else "Correlation"
+    ranking <- ranking[!is.na(ranking[[val_col]]), , drop = FALSE]
+    if (nrow(ranking) == 0) {
+      return(ggplot() + annotate("text", x = 0.5, y = 0.5, label = "All correlations are NA") + theme_void())
+    }
     ggplot(ranking, aes(x = reorder(Variable, .data[[val_col]]),
                         y = .data[[val_col]])) +
       geom_col(fill = ifelse(ranking[[val_col]] > 0, "#2c7bb6", "#d7191c"),
@@ -201,6 +205,10 @@ server <- function(input, output, session) {
 
   custom_tornado_log <- function(ee_df, title, xlab = expression(mu * "*")) {
     df <- data.frame(Variable = rownames(ee_df), mu_star = ee_df[, "mu.star"])
+    df <- df[!is.na(df$mu_star), , drop = FALSE]
+    if (nrow(df) == 0) {
+      return(ggplot() + annotate("text", x = 0.5, y = 0.5, label = "All mu* are NA") + theme_void())
+    }
     ggplot(df, aes(x = reorder(Variable, mu_star), y = mu_star)) +
       geom_col(fill = "#5e3c99", width = 0.6) +
       scale_y_log10(
@@ -225,7 +233,7 @@ server <- function(input, output, session) {
   # Dynamically load population groups
   observe({
     all_groups <- sort(unique(airqmra::ir_long_table$classification))
-    updateSelectInput(session, "exposure_group", choices = all_groups)
+    updateSelectInput(session, "exposure_group", choices = all_groups, selected = "Adult")
   })
 
   # Dynamically update column names of uploaded file
@@ -234,7 +242,21 @@ server <- function(input, output, session) {
     updateSelectInput(session, "conc_col", choices = names(header))
   })
 
-  # Concentration distribution function
+  # Truncated survival distribution (ensures values in [0,1])
+  surv_dist_trunc <- reactive({
+    surv_rec <- get_survival(input$pathogen)
+    if (surv_rec$dist == "lognormal") {
+      function(n) {
+        pmax(0, pmin(1, rlnorm(n, meanlog = surv_rec$log_mean, sdlog = surv_rec$log_sd)))
+      }
+    } else if (surv_rec$dist == "constant") {
+      function(n) rep(surv_rec$value, n)
+    } else {
+      function(n) rep(0.5, n)
+    }
+  })
+
+  # Robust concentration distribution function
   conc_dist <- reactive({
     req(input$conc_type)
     if (input$conc_type == "default") {
@@ -244,13 +266,22 @@ server <- function(input, output, session) {
       function(n) rep(input$conc_fixed, n)
     } else if (input$conc_type == "file") {
       req(input$conc_file, input$conc_col, input$conc_method)
-      import_concentration(input$conc_file$datapath,
-                           col = input$conc_col,
-                           method = input$conc_method)
+      fpath <- input$conc_file$datapath
+      if (is.null(fpath) || !file.exists(fpath) || file.size(fpath) == 0) {
+        showNotification("Uploaded file is empty or missing. Using default concentration.", type = "warning")
+        return(function(n) rlnorm(n, meanlog = log(50), sdlog = log(1.8)))
+      }
+      tryCatch(
+        import_concentration(fpath, col = input$conc_col, method = input$conc_method),
+        error = function(e) {
+          showNotification(paste("Concentration import failed:", e$message), type = "error")
+          function(n) rlnorm(n, meanlog = log(50), sdlog = log(1.8))
+        }
+      )
     }
   })
 
-  # Build scenario
+  # Build scenario (used everywhere except when explicitly overridden)
   build_scenario <- reactive({
     scen <- new_scenario(
       pathogen_id          = input$pathogen,
@@ -259,43 +290,75 @@ server <- function(input, output, session) {
       season               = input$season,
       population_deposition = input$population_deposition,
       use_uncertainty      = as.logical(input$use_uncertainty),
-      C_air_dist           = conc_dist()
+      C_air_dist           = conc_dist(),
+      survival             = surv_dist_trunc(),
+      dr_generator         = NULL
     )
     scen
+  })
+
+  # ---- Helper: extract model type and parameter names ----
+  dose_response_info <- reactive({
+    rec <- pathogen_info(input$pathogen)
+    if (nrow(rec) == 0) return(list(model = "unknown", params = ""))
+    model <- rec$model[1]
+    if (model == "exponential") {
+      list(model = model, params = "k")
+    } else if (model %in% c("exact_beta_poisson", "beta_poisson")) {
+      list(model = model, params = "alpha, beta")
+    } else if (model == "approx_beta_poisson") {
+      list(model = model, params = "alpha, N50")
+    } else {
+      list(model = model, params = "")
+    }
   })
 
   output$scenario_summary <- renderPrint({
     scen <- build_scenario()
     cat("Pathogen:", scen$pathogen, "\n")
-
-    # Handle uncertainty mode (dr_pars may be NULL)
+    model_type <- NULL
+    params <- NULL
     if (!is.null(scen$dr_pars)) {
       model_type <- scen$dr_pars$type
-    } else {
+      params <- scen$dr_pars
+    } else if (!is.null(scen$pathogen_id)) {
       rec <- pathogen_info(scen$pathogen_id)
-      model_type <- if (nrow(rec) > 0) rec$model[1] else "unknown"
+      if (nrow(rec) > 0) {
+        model_type <- rec$model[1]
+        if (model_type == "exponential") {
+          params <- list(k = rec$k[1])
+        } else if (model_type == "exact_beta_poisson") {
+          params <- list(alpha = rec$alpha[1], beta = rec$beta[1])
+        } else if (model_type == "approx_beta_poisson") {
+          params <- list(alpha = rec$alpha[1], N50 = rec$N50[1])
+        }
+      }
     }
-    cat("Model type:", model_type, "\n")
-
-    if (!is.null(scen$dr_pars)) {
-      if (scen$dr_pars$type == "exponential") {
-        cat("k =", signif(scen$dr_pars$k, 3), "\n")
-      } else if (scen$dr_pars$type == "exact_beta_poisson") {
-        cat("alpha =", scen$dr_pars$alpha, " beta =", signif(scen$dr_pars$beta, 3), "\n")
-      } else if (scen$dr_pars$type == "approx_beta_poisson") {
-        cat("alpha =", scen$dr_pars$alpha, " N50 =", signif(scen$dr_pars$N50, 3), "\n")
+    cat("Model type:", ifelse(is.null(model_type), "unknown", model_type), "\n")
+    if (!is.null(params)) {
+      if (model_type == "exponential") {
+        k_val <- params$k
+        if (is.numeric(k_val) && is.finite(k_val)) cat("k =", signif(k_val, 3), "\n")
+      } else if (model_type == "exact_beta_poisson") {
+        alpha_val <- params$alpha; beta_val <- params$beta
+        if (is.numeric(alpha_val) && is.numeric(beta_val))
+          cat("alpha =", alpha_val, " beta =", signif(beta_val, 3), "\n")
+      } else if (model_type == "approx_beta_poisson") {
+        alpha_val <- params$alpha; n50_val <- params$N50
+        if (is.numeric(alpha_val) && is.numeric(n50_val)) {
+          n50_str <- if (is.finite(n50_val)) signif(n50_val, 3) else "unknown"
+          cat("alpha =", alpha_val, " N50 =", n50_str, "\n")
+        }
       }
     } else {
       cat("Uncertainty enabled (parameters sampled from distributions).\n")
     }
-
     if (input$conc_type == "file") {
       cat("\nImported concentration distribution info:\n")
       print(conc_dist())
     }
   })
 
-  # Scenario validation
   output$scenario_check <- renderPrint({
     scen <- build_scenario()
     cat("Running scenario checks...\n")
@@ -354,7 +417,9 @@ server <- function(input, output, session) {
       season               = input$season,
       population_deposition = input$population_deposition,
       use_uncertainty      = TRUE,
-      C_air_dist           = conc_dist()
+      C_air_dist           = conc_dist(),
+      survival             = surv_dist_trunc(),
+      dr_generator         = NULL
     )
     if (input$annual_type == "fixed_freq") {
       freq <- input$freq
@@ -392,7 +457,6 @@ server <- function(input, output, session) {
       theme_light(base_size = 14)
   })
 
-  # Variability boxplot
   output$var_boxplot <- renderPlot({
     req(res2d())
     mat <- res2d()$risk_matrix
@@ -421,7 +485,9 @@ server <- function(input, output, session) {
       season               = input$season,
       population_deposition = input$population_deposition,
       use_uncertainty      = TRUE,
-      C_air_dist           = conc_dist()
+      C_air_dist           = conc_dist(),
+      survival             = surv_dist_trunc(),
+      dr_generator         = NULL
     )
     freq <- if (input$annual_type == "fixed_freq") input$freq else 20
     showNotification("Running small 2D simulation to record inputs...", type = "default")
@@ -436,9 +502,10 @@ server <- function(input, output, session) {
   observeEvent(input$run_global_spearman, {
     req(global_res2d())
     sens <- sensitivity_global(global_res2d(), method = "spearman")
+    dr_info <- dose_response_info()
     output$global_spearman_plot <- renderPlot({
       custom_tornado(sens$ranking,
-                     title = "Global Spearman (incl. k)",
+                     title = paste0("Global Spearman (incl. ", dr_info$params, ")"),
                      xlab = "Spearman correlation")
     })
   })
@@ -447,16 +514,16 @@ server <- function(input, output, session) {
   observeEvent(input$run_global_prcc, {
     req(global_res2d())
     sens <- sensitivity_global_prcc(global_res2d(), nboot = 200)
+    dr_info <- dose_response_info()
     output$global_prcc_plot <- renderPlot({
       custom_tornado(sens$ranking,
-                     title = "Global PRCC (incl. k)",
+                     title = paste0("Global PRCC (incl. ", dr_info$params, ")"),
                      xlab = "Partial rank correlation")
     })
   })
 
   # ---- Global Morris ----
   observeEvent(input$run_global_morris, {
-    # Morris can use the uncertainty scenario directly without recorded inputs
     scen_unc <- new_scenario(
       pathogen_id          = input$pathogen,
       exposure_group       = input$exposure_group,
@@ -464,12 +531,15 @@ server <- function(input, output, session) {
       season               = input$season,
       population_deposition = input$population_deposition,
       use_uncertainty      = TRUE,
-      C_air_dist           = conc_dist()
+      C_air_dist           = conc_dist(),
+      survival             = surv_dist_trunc(),
+      dr_generator         = NULL
     )
     sens <- sensitivity_global_morris(scen_unc, n_levels = 8, n_trajectories = 50)
+    dr_info <- dose_response_info()
     output$global_morris_plot <- renderPlot({
       custom_tornado_log(sens$ee,
-                         title = "Global Morris (mu*, incl. k)")
+                         title = paste0("Global Morris (mu*, incl. ", dr_info$params, ")"))
     })
   })
 
@@ -483,7 +553,9 @@ server <- function(input, output, session) {
         season               = input$season,
         population_deposition = input$population_deposition,
         use_uncertainty      = FALSE,
-        C_air_dist           = conc_dist()
+        C_air_dist           = conc_dist(),
+        survival             = surv_dist_trunc(),
+        dr_generator         = NULL
       )
       sens <- sensitivity_1d(scen_point, n_iter = 2000)
       custom_tornado(sens$sensitivity$ranking,
@@ -492,20 +564,36 @@ server <- function(input, output, session) {
     })
   })
 
-  # NEW: Parameter Uncertainty Sensitivity
-  param_unc_result <- eventReactive(input$run_param_unc, {
+  # Parameter Uncertainty – multi‑parameter version
+  param_unc_all <- eventReactive(input$run_param_unc, {
     req(res2d())
-    sensitivity_2d_auto(res2d())
+    param_list <- res2d()$param_list
+    mean_risk <- res2d()$mean_risk
+    # Gather all unique parameter names
+    param_names <- unique(unlist(lapply(param_list, names)))
+    cor_list <- lapply(param_names, function(pn) {
+      vals <- sapply(param_list, function(x) x[pn])
+      cor(vals, mean_risk, method = "spearman", use = "complete.obs")
+    })
+    cors <- unlist(cor_list)
+    ranking <- data.frame(
+      Variable = param_names,
+      Correlation = cors,
+      AbsCorrelation = abs(cors),
+      stringsAsFactors = FALSE
+    )
+    ranking <- ranking[order(-ranking$AbsCorrelation), ]
+    ranking
   })
 
   output$param_unc_plot <- renderPlot({
-    req(param_unc_result())
-    custom_tornado(param_unc_result()$ranking,
-                   title = "Parameter Uncertainty (k)",
+    req(param_unc_all())
+    custom_tornado(param_unc_all(),
+                   title = "Parameter Uncertainty (all parameters)",
                    xlab = "Spearman correlation")
   })
 
-  # PRCC analysis (unchanged)
+  # PRCC analysis
   prcc_result <- eventReactive(input$run_prcc, {
     scen_point <- new_scenario(
       pathogen_id          = input$pathogen,
@@ -514,7 +602,9 @@ server <- function(input, output, session) {
       season               = input$season,
       population_deposition = input$population_deposition,
       use_uncertainty      = FALSE,
-      C_air_dist           = conc_dist()
+      C_air_dist           = conc_dist(),
+      survival             = surv_dist_trunc(),
+      dr_generator         = NULL
     )
     sensitivity_prcc(scen_point, n_iter = 3000, nboot = 200)
   })
@@ -526,7 +616,7 @@ server <- function(input, output, session) {
                    xlab = "Partial rank correlation")
   })
 
-  # MODIFIED: Morris analysis (global or local)
+  # Morris analysis (global or local)
   morris_result <- eventReactive(input$run_morris, {
     if (input$morris_global) {
       scen_unc <- new_scenario(
@@ -536,7 +626,9 @@ server <- function(input, output, session) {
         season               = input$season,
         population_deposition = input$population_deposition,
         use_uncertainty      = TRUE,
-        C_air_dist           = conc_dist()
+        C_air_dist           = conc_dist(),
+        survival             = surv_dist_trunc(),
+        dr_generator         = NULL
       )
       sensitivity_global_morris(scen_unc, n_levels = input$morris_levels,
                                 n_trajectories = input$morris_traj)
@@ -548,7 +640,9 @@ server <- function(input, output, session) {
         season               = input$season,
         population_deposition = input$population_deposition,
         use_uncertainty      = FALSE,
-        C_air_dist           = conc_dist()
+        C_air_dist           = conc_dist(),
+        survival             = surv_dist_trunc(),
+        dr_generator         = NULL
       )
       sensitivity_morris(scen_point, n_levels = input$morris_levels,
                          n_trajectories = input$morris_traj)
@@ -558,43 +652,58 @@ server <- function(input, output, session) {
   output$morris_plot <- renderPlot({
     req(morris_result())
     custom_tornado_log(morris_result()$ee,
-    title = if (input$morris_global) "Morris Sensitivity (mu*, incl. k)" else "Morris Sensitivity (mu*)")
+                       title = if (input$morris_global) "Morris Sensitivity (mu*, incl. parameter)" else "Morris Sensitivity (mu*)")
   })
 
-  # Sobol'
+  # Sobol' analysis
   sobol_result <- reactive({
     req(res2d(), input$sobol_n, input$sobol_nboot)
-    scen <- new_scenario(
-      pathogen_id          = input$pathogen,
-      exposure_group       = input$exposure_group,
-      microenvironment     = input$microenvironment,
-      season               = input$season,
-      population_deposition = input$population_deposition,
-      use_uncertainty      = TRUE,
-      C_air_dist           = conc_dist()
-    )
-    sobol_sensitivity(scen, n = input$sobol_n, nboot = input$sobol_nboot)
+    tryCatch({
+      scen <- new_scenario(
+        pathogen_id          = input$pathogen,
+        exposure_group       = input$exposure_group,
+        microenvironment     = input$microenvironment,
+        season               = input$season,
+        population_deposition = input$population_deposition,
+        use_uncertainty      = TRUE,
+        C_air_dist           = conc_dist(),
+        dr_generator         = NULL,
+        survival             = surv_dist_trunc()
+      )
+      sobol_sensitivity(scen, n = input$sobol_n, nboot = input$sobol_nboot)
+    }, error = function(e) {
+      showNotification(paste("Sobol' analysis failed:", e$message), type = "error")
+      NULL
+    })
   })
 
   output$sobol_plot <- renderPlot({
     req(sobol_result())
     res <- sobol_result()
     S <- as.data.frame(res$S) %>% rownames_to_column("Variable") %>%
-      rename(original = original, min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+      rename(original = original)
     T <- as.data.frame(res$T) %>% rownames_to_column("Variable") %>%
-      rename(original = original, min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+      rename(original = original)
+    has_ci <- all(c("min. c.i.", "max. c.i.") %in% names(S))
+    if (has_ci) {
+      S <- S %>% rename(min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+      T <- T %>% rename(min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+    }
     combined <- bind_rows(S %>% mutate(Type = "First-order"),
                           T %>% mutate(Type = "Total-effect"))
-    ggplot(combined, aes(x = reorder(Variable, original), y = original, fill = Type)) +
+    p <- ggplot(combined, aes(x = reorder(Variable, original), y = original, fill = Type)) +
       geom_col(position = position_dodge(width = 0.7), width = 0.6) +
-      geom_errorbar(aes(ymin = pmax(0, min_ci), ymax = max_ci),
-                    position = position_dodge(width = 0.7), width = 0.15, color = "grey30") +
       coord_flip() +
       scale_fill_manual(values = c("First-order" = "steelblue", "Total-effect" = "coral")) +
       labs(title = "Sobol' Variance Decomposition",
-           subtitle = "First-order and Total-effect Indices (95% CI)",
+           subtitle = if (has_ci) "First-order and Total-effect Indices (95% CI)" else "First-order and Total-effect Indices (no bootstrap CI)",
            x = "", y = "Sobol' Index") +
       theme_minimal(base_size = 14)
+    if (has_ci) {
+      p <- p + geom_errorbar(aes(ymin = pmax(0, min_ci), ymax = max_ci),
+                             position = position_dodge(0.7), width = 0.15, color = "grey30")
+    }
+    p
   })
 
   output$sobol_text <- renderPrint({
@@ -629,7 +738,9 @@ server <- function(input, output, session) {
         season               = season,
         population_deposition = pop_dep,
         use_uncertainty      = FALSE,
-        C_air_dist           = conc_fun
+        C_air_dist           = conc_fun,
+        survival             = surv_dist_trunc(),
+        dr_generator         = NULL
       )
     }
     if (length(scens) == 0) return(NULL)
@@ -652,14 +763,13 @@ server <- function(input, output, session) {
     updateTextInput(session, "report_dir", value = getwd())
   })
 
-  # Report generation (main thread, with progress)
+  # Report generation
   observeEvent(input$generate_report, {
     if (is.null(res1d())) {
       showNotification("Please run the 1D Simulation first.", type = "error")
       return()
     }
 
-    # Build point-estimate scenario for sensitivity (ensures dr_pars exists)
     scen_pt <- new_scenario(
       pathogen_id          = input$pathogen,
       exposure_group       = input$exposure_group,
@@ -667,10 +777,11 @@ server <- function(input, output, session) {
       season               = input$season,
       population_deposition = input$population_deposition,
       use_uncertainty      = FALSE,
-      C_air_dist           = conc_dist()
+      C_air_dist           = conc_dist(),
+      survival             = surv_dist_trunc(),
+      dr_generator         = NULL
     )
 
-    # Prepare results with error catching
     results <- tryCatch({
       core <- list(
         single_risk    = res1d()$single,
@@ -699,7 +810,6 @@ server <- function(input, output, session) {
       output_file <- paste0(output_file, ".html")
     }
 
-    # Render report with progress bar
     showNotification("Generating report...", type = "default")
     withProgress(message = "Rendering report", value = 0, {
       success <- FALSE

@@ -73,16 +73,11 @@ new_scenario <- function(pathogen_name = NULL,
 
   # ---------- dose-response parameter handling ----------
   if (!is.null(dr_generator)) {
-    # 用户提供了自定义生成器，直接使用，跳过数据库和手动参数
     dr_pars <- NULL
     if (!is.null(pathogen_id)) {
       message("'dr_generator' provided; ignoring 'pathogen_id'.")
     }
-    if (!is.null(dr_pars)) {
-      warning("'dr_pars' is ignored because 'dr_generator' was provided.")
-    }
   } else if (!is.null(dr_pars)) {
-    # 用户提供了固定参数
     if (!is.null(pathogen_id)) {
       message("Both 'pathogen_id' and 'dr_pars' provided. Using 'dr_pars' and ignoring 'pathogen_id'.")
     }
@@ -94,7 +89,6 @@ new_scenario <- function(pathogen_name = NULL,
     if (nrow(rec) == 0) {
       stop("No pathogen found for '", pathogen_id, "'.")
     }
-    # multi-parameter selection logic
     if (nrow(rec) == 1) {
       chosen <- 1L
     } else {
@@ -135,30 +129,28 @@ new_scenario <- function(pathogen_name = NULL,
     chosen_row <- rec[chosen, ]
     model <- chosen_row$model
 
-    # build parameters based on uncertainty setting
-    if (use_uncertainty) {
+    if (isTRUE(use_uncertainty)) {
       dr_generator <- build_dr_generator(chosen_row, use_uncertainty = TRUE)
-      dr_pars <- NULL   # not used in uncertainty mode
     } else {
       dr_generator <- NULL
-      dr_pars <- list(type = model)
-      if (model == "exponential") {
-        if (is.na(chosen_row$k)) stop("Parameter 'k' is missing.")
-        dr_pars$k <- chosen_row$k
-      } else if (model == "exact_beta_poisson") {
-        if (!is.na(chosen_row$alpha) && !is.na(chosen_row$beta)) {
-          dr_pars$alpha <- chosen_row$alpha
-          dr_pars$beta  <- chosen_row$beta
-        } else if (!is.na(chosen_row$alpha) && !is.na(chosen_row$N50)) {
-          dr_pars$type <- "approx_beta_poisson"
-          dr_pars$alpha <- chosen_row$alpha
-          dr_pars$N50   <- chosen_row$N50
-        } else {
-          stop("Beta-Poisson model requires either 'beta' or 'N50' in the database.")
-        }
-      } else {
-        stop("Unknown model type: ", model)
-      }
+    }
+
+    dr_pars <- list(type = model)
+    if (model == "exponential") {
+      if (is.na(chosen_row$k)) stop("Parameter 'k' is missing.")
+      dr_pars$k <- chosen_row$k
+    } else if (model %in% c("exact_beta_poisson", "beta_poisson")) {
+      if (is.na(chosen_row$alpha) || is.na(chosen_row$beta))
+        stop("Parameters 'alpha' or 'beta' missing for exact beta-Poisson.")
+      dr_pars$alpha <- chosen_row$alpha
+      dr_pars$beta  <- chosen_row$beta
+    } else if (model == "approx_beta_poisson") {
+      if (is.na(chosen_row$alpha) || is.na(chosen_row$N50))
+        stop("Parameters 'alpha' or 'N50' missing for approximate beta-Poisson.")
+      dr_pars$alpha <- chosen_row$alpha
+      dr_pars$N50   <- chosen_row$N50
+    } else {
+      stop("Unknown model type: ", model)
     }
   }
 
@@ -167,7 +159,6 @@ new_scenario <- function(pathogen_name = NULL,
   user_t  <- !is.null(t_exp)
 
   if (!is.null(exposure_group)) {
-    # 1. inhalation rate (long-term, m^3/d -> m^3/h)
     if (!user_IR) {
       ir_info <- get_ir_long(exposure_group, fallback = fallback)
       if (!is.null(ir_info)) {
@@ -178,24 +169,19 @@ new_scenario <- function(pathogen_name = NULL,
                 "' (converted to m^3/h).")
       }
     }
-
-    # 2. exposure time
     if (!user_t) {
       if (!is.null(activity_template) && !is.null(activity_intensity)) {
-        # use fixed duration from activity template
         budget <- get_activity_budget(activity_template)
         act_min <- budget$minutes[activity_intensity]
         if (is.na(act_min)) {
           stop("Activity intensity '", activity_intensity, "' not in template '", activity_template, "'.")
         }
-        t_exp <- act_min / 60   # convert to hours
+        t_exp <- act_min / 60
         message("Exposure duration set to ", t_exp, " hours (from template '",
                 activity_template, "', intensity '", activity_intensity, "').")
       } else {
-        # use time-activity database (indoor/outdoor, minute distribution)
         time_info <- get_time(exposure_group, microenvironment, season, fallback = fallback)
         if (!is.null(time_info)) {
-          # minutes -> hours
           t_exp <- function(n) stats::rlnorm(n,
                                              meanlog = time_info$log_mean - log(60),
                                              sdlog   = time_info$log_sd)
@@ -236,7 +222,7 @@ new_scenario <- function(pathogen_name = NULL,
       )
       message("Deposition distribution loaded for population '", population_deposition, "'.")
     } else {
-      deposition_dist <- function(n) rep(0.5, n)  # safe fallback
+      deposition_dist <- function(n) rep(0.5, n)
     }
   } else if (is.function(deposition)) {
     deposition_dist <- deposition
@@ -244,7 +230,7 @@ new_scenario <- function(pathogen_name = NULL,
     deposition_dist <- function(n) rep(deposition, n)
   }
 
-  # ---------- AG fixed to 1 (no additional multiplication by default) ----------
+  # ---------- AG fixed to 1 ----------
   if (is.function(AG)) {
     AG_dist <- AG
   } else {
@@ -253,14 +239,9 @@ new_scenario <- function(pathogen_name = NULL,
 
   # ---------- scenario naming ----------
   if (is.null(pathogen_name)) {
-    if (!is.null(pathogen_id)) {
-      pathogen_name <- pathogen_id
-    } else {
-      pathogen_name <- "Unnamed scenario"
-    }
+    pathogen_name <- if (!is.null(pathogen_id)) pathogen_id else "Unnamed scenario"
   }
 
-  # ---------- set final defaults ----------
   if (is.null(IR_dist)) {
     IR_dist <- function(n) stats::rnorm(n, mean = 0.7, sd = 0.1)
   }
@@ -268,7 +249,6 @@ new_scenario <- function(pathogen_name = NULL,
     t_exp <- 1.0
   }
 
-  # ---------- build scenario object ----------
   scenario <- list(
     pathogen         = pathogen_name,
     pathogen_id      = pathogen_id,
@@ -279,8 +259,7 @@ new_scenario <- function(pathogen_name = NULL,
     deposition_dist  = deposition_dist,
     survival_dist    = survival_dist,
     dr_pars          = dr_pars,
-    dr_generator     = dr_generator,   # uncertainty parameter generator (may be NULL)
-    # Store key configuration parameters for later reuse
+    dr_generator     = dr_generator,
     exposure_group   = exposure_group,
     microenvironment = microenvironment,
     season           = season,
@@ -301,26 +280,21 @@ new_scenario <- function(pathogen_name = NULL,
 #' @return A numeric vector of infection risk with class `airqmra_result`.
 #' @export
 run_qmra_1d <- function(scenario, n_iter = 1e5) {
-  # Generate random samples for all input variables
   C   <- scenario$C_air_dist(n_iter)
   IR  <- scenario$IR_dist(n_iter)
   t   <- scenario$t_exp_dist(n_iter)
 
-  # Calculate effective dose (viable, deposited, and invasion-adjusted)
   dose <- C * IR * t *
     scenario$survival_dist(n_iter) *
     scenario$deposition_dist(n_iter) *
     scenario$AG_dist(n_iter)
 
-  # Obtain dose-response parameters (compatible with point estimate and uncertainty generator)
   if (!is.null(scenario$dr_generator)) {
-    # uncertainty mode: generator returns a list with type and parameter vectors
     dr_params <- scenario$dr_generator(n_iter)
     type <- dr_params$type
     dr_args <- dr_params[names(dr_params) != "type"]
     risk <- do.call(dose_response, c(list(dose = dose, type = type), dr_args))
   } else {
-    # point estimate mode: use the fixed parameter list pre-configured in the scenario
     dr  <- scenario$dr_pars
     type <- dr$type
     dr_args <- dr[names(dr) != "type"]

@@ -25,7 +25,9 @@ sobol_sensitivity(
 (1 for first-order + total, 2 for first + second, 3 for first + second +
 third + total). Ignored when \code{method = "sobol2007"}. Default 2.}
 
-\item{nboot}{Integer. Number of bootstrap replicates for confidence intervals.}
+\item{nboot}{Integer. Number of bootstrap replicates for confidence intervals.
+Set to 0 to skip bootstrap and avoid potential instability with extremely
+low risk values.}
 
 \item{conf}{Numeric. Confidence level for intervals (0-1). Default 0.95.}
 
@@ -39,10 +41,8 @@ specifying higher-order interactions via \code{order}.}
 }
 \value{
 An object of class \code{"sobol2007"} or \code{"sobol"} (from the \code{sensitivity}
-package) containing the estimated indices and bootstrap confidence intervals.
-When \code{method = "sobol2007"}, the object contains \verb{$S} (first-order) and \verb{$T}
-(total-effect) matrices. When \code{method = "sobol"}, the content depends on
-\code{order}.
+package) containing the estimated indices and, if bootstrap was successful,
+bootstrap confidence intervals.
 }
 \description{
 Performs a Sobol' sensitivity analysis on single-exposure (or annual) infection
@@ -51,19 +51,4 @@ deposition) and, when available, the dose-response parameters (k for
 exponential; alpha and N50 for approximate beta-Poisson; alpha and beta for
 exact beta-Poisson) with their uncertainty distributions taken from the
 pathogen database.
-}
-\examples{
-# Legionella outdoor scenario with parameter uncertainty
-scen <- new_scenario(pathogen_id = "legionella pneumophila",
-                     exposure_group = "Adult",
-                     microenvironment = "Outdoor",
-                     population_deposition = "Male",
-                     use_uncertainty = TRUE)
-sobol_res <- sobol_sensitivity(scen, n = 500)
-print(sobol_res)
-plot(sobol_res)
-
-# Annual risk Sobol' analysis
-sobol_annual <- sobol_sensitivity(scen, n = 500, frequency = 20)
-plot(sobol_annual)
 }

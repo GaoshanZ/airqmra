@@ -34,29 +34,29 @@ check_scenario <- function(scenario) {
   if (!is.null(scenario$dr_pars)) {
     dr <- scenario$dr_pars
     if (dr$type == "exponential") {
-      if (is.null(dr$k) || dr$k <= 0) {
+      if (!is.finite(dr$k) || dr$k <= 0) {
         warning("Exponential model: k must be positive.")
         problems <- problems + 1
       }
-      if (!is.null(dr$k) && dr$k > 1) {
+      if (is.finite(dr$k) && dr$k > 1) {
         warning("Exponential model: k = ", signif(dr$k, 3), " seems very large.")
         problems <- problems + 1
       }
     } else if (dr$type == "exact_beta_poisson") {
-      if (is.null(dr$alpha) || dr$alpha <= 0) {
+      if (!is.finite(dr$alpha) || dr$alpha <= 0) {
         warning("Beta-Poisson model: alpha must be positive.")
         problems <- problems + 1
       }
-      if (is.null(dr$beta) || dr$beta <= 0) {
+      if (!is.finite(dr$beta) || dr$beta <= 0) {
         warning("Beta-Poisson model: beta must be positive.")
         problems <- problems + 1
       }
     } else if (dr$type == "approx_beta_poisson") {
-      if (is.null(dr$alpha) || dr$alpha <= 0) {
+      if (!is.finite(dr$alpha) || dr$alpha <= 0) {
         warning("Approx beta-Poisson model: alpha must be positive.")
         problems <- problems + 1
       }
-      if (is.null(dr$N50) || dr$N50 <= 0) {
+      if (!is.finite(dr$N50) || dr$N50 <= 0) {
         warning("Approx beta-Poisson model: N50 must be positive.")
         problems <- problems + 1
       }

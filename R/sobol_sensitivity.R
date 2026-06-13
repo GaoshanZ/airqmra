@@ -15,6 +15,8 @@
 #'   (1 for first-order + total, 2 for first + second, 3 for first + second +
 #'   third + total). Ignored when `method = "sobol2007"`. Default 2.
 #' @param nboot Integer. Number of bootstrap replicates for confidence intervals.
+#'   Set to 0 to skip bootstrap and avoid potential instability with extremely
+#'   low risk values.
 #' @param conf Numeric. Confidence level for intervals (0-1). Default 0.95.
 #' @param frequency Optional. If provided, the model function returns annual risk
 #'   instead of single-exposure risk (using `annual_risk()`).
@@ -24,26 +26,9 @@
 #'   specifying higher-order interactions via `order`.
 #'
 #' @return An object of class `"sobol2007"` or `"sobol"` (from the `sensitivity`
-#'   package) containing the estimated indices and bootstrap confidence intervals.
-#'   When `method = "sobol2007"`, the object contains `$S` (first-order) and `$T`
-#'   (total-effect) matrices. When `method = "sobol"`, the content depends on
-#'   `order`.
+#'   package) containing the estimated indices and, if bootstrap was successful,
+#'   bootstrap confidence intervals.
 #' @export
-#'
-#' @examples
-#' # Legionella outdoor scenario with parameter uncertainty
-#' scen <- new_scenario(pathogen_id = "legionella pneumophila",
-#'                      exposure_group = "Adult",
-#'                      microenvironment = "Outdoor",
-#'                      population_deposition = "Male",
-#'                      use_uncertainty = TRUE)
-#' sobol_res <- sobol_sensitivity(scen, n = 500)
-#' print(sobol_res)
-#' plot(sobol_res)
-#'
-#' # Annual risk Sobol' analysis
-#' sobol_annual <- sobol_sensitivity(scen, n = 500, frequency = 20)
-#' plot(sobol_annual)
 sobol_sensitivity <- function(scenario,
                               n = 1000,
                               order = 2,
@@ -81,28 +66,48 @@ sobol_sensitivity <- function(scenario,
       param_info[[1]] <- list(name = "k",
                               log_mean = chosen_row$k_log_mean,
                               log_sd   = chosen_row$k_log_sd)
+    } else if (!is.na(chosen_row$k)) {
+      param_info[[1]] <- list(name = "k",
+                              log_mean = log(chosen_row$k),
+                              log_sd   = 0.01)
     }
   } else if (model_type == "exact_beta_poisson") {
     if (!is.na(chosen_row$alpha_log_mean) && !is.na(chosen_row$alpha_log_sd)) {
       param_info[[length(param_info)+1]] <- list(name = "alpha",
                                                  log_mean = chosen_row$alpha_log_mean,
                                                  log_sd   = chosen_row$alpha_log_sd)
+    } else if (!is.na(chosen_row$alpha)) {
+      param_info[[length(param_info)+1]] <- list(name = "alpha",
+                                                 log_mean = log(chosen_row$alpha),
+                                                 log_sd   = 0.01)
     }
     if (!is.na(chosen_row$beta_log_mean) && !is.na(chosen_row$beta_log_sd)) {
       param_info[[length(param_info)+1]] <- list(name = "beta",
                                                  log_mean = chosen_row$beta_log_mean,
                                                  log_sd   = chosen_row$beta_log_sd)
+    } else if (!is.na(chosen_row$beta)) {
+      param_info[[length(param_info)+1]] <- list(name = "beta",
+                                                 log_mean = log(chosen_row$beta),
+                                                 log_sd   = 0.01)
     }
   } else if (model_type == "approx_beta_poisson") {
     if (!is.na(chosen_row$alpha_log_mean) && !is.na(chosen_row$alpha_log_sd)) {
       param_info[[length(param_info)+1]] <- list(name = "alpha",
                                                  log_mean = chosen_row$alpha_log_mean,
                                                  log_sd   = chosen_row$alpha_log_sd)
+    } else if (!is.na(chosen_row$alpha)) {
+      param_info[[length(param_info)+1]] <- list(name = "alpha",
+                                                 log_mean = log(chosen_row$alpha),
+                                                 log_sd   = 0.01)
     }
     if (!is.na(chosen_row$N50_log_mean) && !is.na(chosen_row$N50_log_sd)) {
       param_info[[length(param_info)+1]] <- list(name = "N50",
                                                  log_mean = chosen_row$N50_log_mean,
                                                  log_sd   = chosen_row$N50_log_sd)
+    } else if (!is.na(chosen_row$N50)) {
+      param_info[[length(param_info)+1]] <- list(name = "N50",
+                                                 log_mean = log(chosen_row$N50),
+                                                 log_sd   = 0.01)
     }
   } else {
     stop("Unsupported dose-response model type: ", model_type)
@@ -136,25 +141,29 @@ sobol_sensitivity <- function(scenario,
                             sdlog = param_info[[j]]$log_sd)
   }
 
-  # ---- 5. model function ----
+  # ---- 5. model function (uses colnames(X) for parameter detection) ----
   model_func <- function(X) {
-    dose <- X[, 1] * X[, 2] * X[, 3] * X[, 4] * X[, 5]   # AG = 1
+    dose <- X[, "C"] * X[, "IR"] * X[, "t"] * X[, "survival"] * X[, "deposition"]
+    cn <- colnames(X)   # available column names
 
     if (model_type == "exponential") {
-      k_vec <- if ("k" %in% var_names) X[, "k"] else rep(chosen_row$k, nrow(X))
+      k_vec <- if ("k" %in% cn) X[, "k"] else rep(chosen_row$k, nrow(X))
       single <- 1 - exp(-k_vec * dose)
     } else if (model_type == "exact_beta_poisson") {
-      alpha_vec <- if ("alpha" %in% var_names) X[, "alpha"] else rep(chosen_row$alpha, nrow(X))
-      beta_vec  <- if ("beta" %in% var_names) X[, "beta"] else rep(chosen_row$beta, nrow(X))
+      alpha_vec <- if ("alpha" %in% cn) X[, "alpha"] else rep(chosen_row$alpha, nrow(X))
+      beta_vec  <- if ("beta" %in% cn) X[, "beta"] else rep(chosen_row$beta, nrow(X))
       single <- exact_beta_poisson(dose, alpha_vec, beta_vec)
     } else if (model_type == "approx_beta_poisson") {
-      alpha_vec <- if ("alpha" %in% var_names) X[, "alpha"] else rep(chosen_row$alpha, nrow(X))
-      N50_vec   <- if ("N50" %in% var_names) X[, "N50"] else rep(chosen_row$N50, nrow(X))
+      alpha_vec <- if ("alpha" %in% cn) X[, "alpha"] else rep(chosen_row$alpha, nrow(X))
+      N50_vec   <- if ("N50" %in% cn) X[, "N50"] else rep(chosen_row$N50, nrow(X))
+      # Numerical safeguard: clip extreme parameters
+      alpha_vec <- pmax(pmin(alpha_vec, 1e4), 1e-4)
+      N50_vec   <- pmax(N50_vec, 1e-2)
       single <- approx_beta_poisson(dose, alpha_vec, N50_vec)
     } else {
       stop("Unknown model type.")
     }
-
+    single <- pmax(pmin(single, 1), 0)
     if (!is.null(frequency)) {
       annual_risk(single, frequency = frequency)
     } else {
@@ -162,13 +171,25 @@ sobol_sensitivity <- function(scenario,
     }
   }
 
-  # ---- 6. run Sobol' analysis (select method) ----
-  if (method == "sobol2007") {
-    res <- sensitivity::sobol2007(model = model_func, X1 = X1, X2 = X2,
-                                  nboot = nboot, conf = conf)
+  # ---- 6. run Sobol' analysis with bootstrap fallback ----
+  run_sobol <- function(use_boot) {
+    if (method == "sobol2007") {
+      sensitivity::sobol2007(model = model_func, X1 = X1, X2 = X2,
+                             nboot = if (use_boot) nboot else 0, conf = conf)
+    } else {
+      sensitivity::sobol(model = model_func, X1 = X1, X2 = X2,
+                         order = order, nboot = if (use_boot) nboot else 0, conf = conf)
+    }
+  }
+
+  if (nboot > 0) {
+    res <- tryCatch(run_sobol(TRUE), error = function(e) NULL)
+    if (is.null(res)) {
+      warning("Bootstrap failed (possibly due to near-zero variance of model output). Falling back to no bootstrap.")
+      res <- run_sobol(FALSE)
+    }
   } else {
-    res <- sensitivity::sobol(model = model_func, X1 = X1, X2 = X2,
-                              order = order, nboot = nboot, conf = conf)
+    res <- run_sobol(FALSE)
   }
   res
 }

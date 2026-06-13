@@ -35,9 +35,10 @@ pathogen_db <- read_csv("data-raw/pathogen_params.csv",
 # 统一模型列名和模型名称
 pathogen_db <- pathogen_db %>%
   rename(model = dose_response_model) %>%
-  mutate(model = case_when(
-    model == "beta-Poisson" ~ "exact_beta_poisson",
-    TRUE                    ~ model
+  mutate(model = recode(model,
+                        "approx_beta_poisson"    = "approx_beta_poisson",
+                        "exact_beta_poisson"     = "exact_beta_poisson",
+                        "exponential"            = "exponential"
   ))
 
 usethis::use_data(pathogen_db, overwrite = TRUE)
