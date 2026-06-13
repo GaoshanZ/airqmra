@@ -11,5 +11,8 @@ survival_db <- read_csv("data-raw/survival_params.csv",
                           value       = col_double(),
                           ref         = col_character()
                         ))
+# 确保所有字符列标记为 UTF‑8
+survival_db <- survival_db %>%
+  mutate(across(where(is.character), enc2utf8))
 
 usethis::use_data(survival_db, overwrite = TRUE)

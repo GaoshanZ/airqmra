@@ -1,9 +1,11 @@
 library(shiny)
 library(ggplot2)
 library(dplyr)
-library(tidyr)
 library(tibble)
 library(airqmra)
+if (!requireNamespace("tidyr", quietly = TRUE)) {
+  stop("Package 'tidyr' is needed for this app. Please install it with install.packages(\"tidyr\").")
+}
 
 # Pathogen list
 pathogen_choices <- unique(airqmra::pathogen_db$pathogen_id)

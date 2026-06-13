@@ -18,4 +18,8 @@ deposition_db <- read_csv("data-raw/deposition_params.csv",
   ) %>%
   select(population, site, dist, log_mean, log_sd, deposition_site)
 
+# 确保所有字符列标记为 UTF‑8
+deposition_db <- deposition_db %>%
+  mutate(across(where(is.character), enc2utf8))
+
 usethis::use_data(deposition_db, overwrite = TRUE)

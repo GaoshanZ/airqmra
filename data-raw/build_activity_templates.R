@@ -15,6 +15,8 @@ activity_templates <- read_csv(
     time_unit            = col_character()
   )
 )
+activity_templates <- activity_templates %>%
+  mutate(across(where(is.character), enc2utf8))
 
 # 保存为包内数据
 usethis::use_data(activity_templates, overwrite = TRUE)

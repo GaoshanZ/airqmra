@@ -99,4 +99,9 @@ time_table <- time_long %>%
          time_log_mean = log_mean, time_log_sd = log_sd, time_unit, ref)
 
 # ================= 保存为包内数据 =================
+# ================= 关键步骤：强制所有字符列标记为 UTF-8 =================
+ir_long_table  <- ir_long_table  %>% mutate(across(where(is.character), enc2utf8))
+ir_short_table <- ir_short_table %>% mutate(across(where(is.character), enc2utf8))
+time_table     <- time_table     %>% mutate(across(where(is.character), enc2utf8))
 usethis::use_data(ir_long_table, ir_short_table, time_table, overwrite = TRUE)
+

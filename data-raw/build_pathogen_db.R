@@ -41,4 +41,8 @@ pathogen_db <- pathogen_db %>%
                         "exponential"            = "exponential"
   ))
 
+# 确保所有字符列标记为 UTF‑8（解决 non‑ASCII NOTE）
+pathogen_db <- pathogen_db %>%
+  mutate(across(where(is.character), enc2utf8))
+
 usethis::use_data(pathogen_db, overwrite = TRUE)
