@@ -8,7 +8,6 @@
   sens,
   title = "Morris Sensitivity (mu*)",
   xlab = expression(mu * "*"),
-  log_scale = TRUE,
   ...
 )
 }
@@ -19,9 +18,6 @@
 
 \item{xlab}{X-axis label (defaults to \eqn{\mu^*}).}
 
-\item{log_scale}{Logical. If \code{TRUE} (default), the x‑axis is
-log10‑transformed.}
-
 \item{...}{Additional arguments passed to other methods.}
 }
 \value{
@@ -31,6 +27,4 @@ A ggplot2 object.
 Displays \eqn{\mu^*} (the mean of absolute elementary effects) as a
 bar chart, providing a ranking of variable importance. Because Morris
 \eqn{\mu^*} values can span many orders of magnitude, the plot uses a
-log10 x‑axis by default. Set \code{log_scale = FALSE} to use the original
-linear scale.
 }

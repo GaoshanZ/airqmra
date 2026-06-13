@@ -192,7 +192,7 @@ tornado_plot <- function(sens, ...) {
 #' @export
 tornado_plot.default <- function(sens, title = "Sensitivity Analysis",
                                  xlab = "Spearman Correlation", ...) {
-  # Extract ranking data frame (works for compute_sensitivity, sensitivity_1d, etc.)
+  # Extract ranking data frame
   if ("sensitivity" %in% names(sens)) {
     ranking <- sens$sensitivity$ranking
   } else if ("ranking" %in% names(sens)) {
@@ -201,20 +201,30 @@ tornado_plot.default <- function(sens, title = "Sensitivity Analysis",
     stop("Input must contain a 'ranking' data frame.")
   }
 
-  if (requireNamespace("ggplot2", quietly = TRUE)) {
-    p <- ggplot2::ggplot(ranking, ggplot2::aes(x = reorder(Variable, Correlation),
-                                               y = Correlation, fill = Correlation > 0)) +
-      ggplot2::geom_col() +
-      ggplot2::coord_flip() +
-      ggplot2::labs(title = title, x = "", y = xlab) +
-      ggplot2::theme_minimal() +
-      ggplot2::scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "firebrick"), guide = "none")
-    return(p)
-  } else {
-    barplot(ranking$Correlation, names.arg = ranking$Variable, horiz = TRUE,
-            col = ifelse(ranking$Correlation > 0, "steelblue", "firebrick"),
-            main = title, xlab = xlab)
+  # Remove rows with NA correlation (e.g., constant variables)
+  val_col <- if ("PRCC" %in% names(ranking)) "PRCC" else "Correlation"
+  ranking <- ranking[!is.na(ranking[[val_col]]), , drop = FALSE]
+
+  if (nrow(ranking) == 0) {
+    return(ggplot2::ggplot() +
+             ggplot2::annotate("text", x = 0.5, y = 0.5, label = "All correlations are NA") +
+             ggplot2::theme_void())
   }
+
+  ggplot2::ggplot(ranking, ggplot2::aes(x = reorder(Variable, .data[[val_col]]),
+                                        y = .data[[val_col]])) +
+    ggplot2::geom_col(fill = ifelse(ranking[[val_col]] > 0, "#2c7bb6", "#d7191c"),
+                      width = 0.6) +
+    ggplot2::coord_flip() +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.006, 0.05))) +
+    ggplot2::labs(title = title, x = "", y = xlab) +
+    ggplot2::theme_classic(base_size = 13) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      axis.text = ggplot2::element_text(color = "black"),
+      axis.ticks.y = ggplot2::element_blank(),
+      panel.grid.major.y = ggplot2::element_blank()
+    )
 }
 
 #' Sensitivity analysis for 2D Monte Carlo results (convenience wrapper)

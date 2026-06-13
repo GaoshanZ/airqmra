@@ -193,3 +193,49 @@ sobol_sensitivity <- function(scenario,
   }
   res
 }
+
+#' @export
+tornado_plot.sobol2007 <- function(sens, title = "Sobol' Variance Decomposition",
+                                   xlab = "Sobol' Index", ...) {
+  # extract first and total effect data
+  S <- as.data.frame(sens$S) %>% rownames_to_column("Variable") %>%
+    rename(original = original)
+  T <- as.data.frame(sens$T) %>% rownames_to_column("Variable") %>%
+    rename(original = original)
+
+  has_ci <- all(c("min. c.i.", "max. c.i.") %in% names(S))
+  if (has_ci) {
+    S <- S %>% rename(min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+    T <- T %>% rename(min_ci = `min. c.i.`, max_ci = `max. c.i.`)
+  }
+
+  combined <- dplyr::bind_rows(S %>% mutate(Type = "First-order"),
+                               T %>% mutate(Type = "Total-effect"))
+
+  p <- ggplot2::ggplot(combined, ggplot2::aes(x = reorder(Variable, original), y = original, fill = Type)) +
+    ggplot2::geom_col(position = ggplot2::position_dodge(width = 0.7), width = 0.6) +
+    ggplot2::coord_flip() +
+    ggplot2::scale_fill_manual(values = c("First-order" = "steelblue", "Total-effect" = "coral")) +
+    ggplot2::labs(title = title,
+                  subtitle = if (has_ci) "First-order and Total-effect Indices (95% CI)" else "First-order and Total-effect Indices (no bootstrap CI)",
+                  x = "", y = xlab) +
+    ggplot2::theme_classic(base_size = 13) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      axis.text = ggplot2::element_text(color = "black"),
+      axis.ticks.y = ggplot2::element_blank(),
+      panel.grid.major.y = ggplot2::element_blank()
+    )
+
+  if (has_ci) {
+    p <- p + ggplot2::geom_errorbar(ggplot2::aes(ymin = pmax(0, min_ci), ymax = max_ci),
+                                    position = ggplot2::position_dodge(0.7), width = 0.15, color = "grey30")
+  }
+  p
+}
+
+#' @export
+tornado_plot.sobol <- function(sens, title = "Sobol' Variance Decomposition",
+                               xlab = "Sobol' Index", ...) {
+  tornado_plot.sobol2007(sens, title, xlab, ...)
+}

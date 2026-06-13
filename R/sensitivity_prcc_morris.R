@@ -257,39 +257,47 @@ plot.morris_airqmra <- function(x, ...) {
 #' Displays \eqn{\mu^*} (the mean of absolute elementary effects) as a
 #' bar chart, providing a ranking of variable importance. Because Morris
 #' \eqn{\mu^*} values can span many orders of magnitude, the plot uses a
-#' log10 x‑axis by default. Set \code{log_scale = FALSE} to use the original
-#' linear scale.
 #'
 #' @param sens A \code{morris_airqmra} object.
 #' @param title Plot title.
 #' @param xlab X-axis label (defaults to \eqn{\mu^*}).
 #' @param ... Additional arguments passed to other methods.
-#' @param log_scale Logical. If \code{TRUE} (default), the x‑axis is
-#'   log10‑transformed.
 #'
 #' @return A ggplot2 object.
 #' @export
-tornado_plot.morris_airqmra <- function(sens,
-                                        title = "Morris Sensitivity (mu*)",
-                                        xlab = expression(mu*"*"),
-                                        log_scale = TRUE, ...) {
+tornado_plot.morris_airqmra <- function(sens, title = "Morris Sensitivity (mu*)",
+                                        xlab = expression(mu * "*"), ...) {
   ee <- sens$ee
   df <- data.frame(Variable = rownames(ee), mu_star = ee[, "mu.star"])
+  df <- df[!is.na(df$mu_star), , drop = FALSE]
 
-  p <- ggplot2::ggplot(df, ggplot2::aes(x = reorder(Variable, mu_star), y = mu_star)) +
-    ggplot2::geom_col(fill = "steelblue") +
-    ggplot2::coord_flip() +
-    ggplot2::labs(title = title, x = "", y = xlab) +
-    ggplot2::theme_minimal()
-
-  if (log_scale) {
-    p <- p + ggplot2::scale_y_log10(
-      breaks = scales::trans_breaks("log10", function(x) 10^x),
-      labels = scales::trans_format("log10", scales::math_format(10^.x))
-    )
+  if (nrow(df) == 0) {
+    return(ggplot2::ggplot() +
+             ggplot2::annotate("text", x = 0.5, y = 0.5, label = "All mu* are NA") +
+             ggplot2::theme_void())
   }
 
-  return(p)
+  ggplot2::ggplot(df, ggplot2::aes(x = reorder(Variable, mu_star), y = mu_star)) +
+    ggplot2::geom_col(fill = "#5e3c99", width = 0.6) +
+    ggplot2::scale_y_log10(
+      expand = ggplot2::expansion(mult = c(0.006, 0.05)),
+      breaks = scales::trans_breaks("log10", function(x) 10^x),
+      labels = scales::trans_format("log10", scales::math_format(10^.x)),
+      minor_breaks = NULL
+    ) +
+    ggplot2::annotation_logticks(base = 10, sides = "b",
+                                 long  = unit(0.15, "cm"),
+                                 mid   = unit(0.1, "cm"),
+                                 short = unit(0.05, "cm")) +
+    ggplot2::coord_flip() +
+    ggplot2::labs(title = title, x = "", y = xlab) +
+    ggplot2::theme_classic(base_size = 13) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      axis.text = ggplot2::element_text(color = "black"),
+      axis.ticks.y = ggplot2::element_blank(),
+      panel.grid.major.y = ggplot2::element_blank()
+    )
 }
 
 #' @export
@@ -312,28 +320,27 @@ print.morris_airqmra <- function(x, ...) {
 tornado_plot.prcc_sensitivity <- function(sens, title = "PRCC Sensitivity",
                                           xlab = "Partial Rank Correlation", ...) {
   ranking <- sens$ranking
+  ranking <- ranking[!is.na(ranking$PRCC), , drop = FALSE]
 
-  ci_df <- data.frame(
-    Variable = ranking$Variable,
-    ci_low   = sens$ci["ci_low", ranking$Variable],
-    ci_high  = sens$ci["ci_high", ranking$Variable]
-  )
-  ci_df$PRCC <- ranking$PRCC[match(ci_df$Variable, ranking$Variable)]
+  if (nrow(ranking) == 0) {
+    return(ggplot2::ggplot() +
+             ggplot2::annotate("text", x = 0.5, y = 0.5, label = "All PRCC are NA") +
+             ggplot2::theme_void())
+  }
 
-  p <- ggplot2::ggplot(ranking, ggplot2::aes(x = reorder(Variable, PRCC), y = PRCC)) +
-    ggplot2::geom_col(ggplot2::aes(fill = PRCC > 0)) +
-    ggplot2::geom_errorbar(
-      data = ci_df,
-      ggplot2::aes(ymin = ci_low, ymax = ci_high),
-      width = 0.2,
-      inherit.aes = TRUE
-    ) +
+  ggplot2::ggplot(ranking, ggplot2::aes(x = reorder(Variable, PRCC), y = PRCC)) +
+    ggplot2::geom_col(fill = ifelse(ranking$PRCC > 0, "#2c7bb6", "#d7191c"),
+                      width = 0.6) +
     ggplot2::coord_flip() +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.006, 0.05))) +
     ggplot2::labs(title = title, x = "", y = xlab) +
-    ggplot2::theme_minimal() +
-    ggplot2::scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "firebrick"),
-                               guide = "none")
-  return(p)
+    ggplot2::theme_classic(base_size = 13) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      axis.text = ggplot2::element_text(color = "black"),
+      axis.ticks.y = ggplot2::element_blank(),
+      panel.grid.major.y = ggplot2::element_blank()
+    )
 }
 
 # =============================================================================

@@ -20,12 +20,14 @@ Imports:
     numDeriv,
     scales,
     sensitivity,
-    shiny
+    shiny,
+    ggplot2,
+    rlang,
+    tibble
 Depends: 
     R (>= 3.5)
 LazyData: true
 Suggests: 
-    ggplot2,
     knitr,
     rmarkdown,
     shinythemes
