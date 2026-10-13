@@ -4,8 +4,14 @@
 #' risk. The input variables include exposure factors (C, IR, t, survival,
 #' deposition) and, when available, the dose-response parameters (k for
 #' exponential; alpha and N50 for approximate beta-Poisson; alpha and beta for
-#' exact beta-Poisson) with their uncertainty distributions taken from the
-#' pathogen database.
+#' exact beta-Poisson).
+#'
+#' Two scenario modes are supported:
+#'   - **Database mode**: scenario created with `pathogen_id`, parameters
+#'     taken from the built-in pathogen database.
+#'   - **Custom mode**: scenario created with `dr_generator`, parameter
+#'     distributions obtained directly from the generator (supports
+#'     pathogens not present in the database).
 #'
 #' @param scenario An `airqmra_scenario` object created with
 #'   `use_uncertainty = FALSE` (point-estimate mode) or `use_uncertainty = TRUE`
@@ -24,6 +30,12 @@
 #'   computes first-order and total-effect indices directly and is recommended
 #'   for most applications. `"sobol"` uses the older algorithm and allows
 #'   specifying higher-order interactions via `order`.
+#' @param truncate_95 Logical. If TRUE (default), dose-response parameters are
+#'   truncated to their 95% uncertainty/prediction interval. In database mode,
+#'   exact 95% PI bounds are computed from log-normal parameters; alpha is
+#'   additionally floored at 0.01 to prevent overflow. In custom mode, an
+#'   empirical 2.5%/97.5% truncation is applied using samples drawn from the
+#'   generator. Set to FALSE to reproduce the original (untruncated) behaviour.
 #'
 #' @return An object of class `"sobol2007"` or `"sobol"` (from the `sensitivity`
 #'   package) containing the estimated indices and, if bootstrap was successful,
@@ -35,7 +47,8 @@ sobol_sensitivity <- function(scenario,
                               nboot = 100,
                               conf = 0.95,
                               frequency = NULL,
-                              method = c("sobol2007", "sobol")) {
+                              method = c("sobol2007", "sobol"),
+                              truncate_95 = TRUE) {
   method <- match.arg(method)
 
   if (!requireNamespace("sensitivity", quietly = TRUE)) {
@@ -46,77 +59,121 @@ sobol_sensitivity <- function(scenario,
   var_exp <- c("C", "IR", "t", "survival", "deposition")
   p_exp <- length(var_exp)
 
-  # ---- 2. obtain pathogen info and model type ----
-  pathogen_id <- scenario$pathogen_id
-  if (is.null(pathogen_id)) {
-    stop("Scenario must have a pathogen_id to identify dose-response parameters.")
-  }
-  rec <- pathogen_info(pathogen_id)
-  if (nrow(rec) == 0) stop("Pathogen not found in database.")
-  chosen_row <- rec[1, ]
-  model_type <- chosen_row$model
-  if (is.null(model_type) || is.na(model_type)) {
-    stop("Model type not found in pathogen database.")
+  # ===========================================================================
+  # 2-3. Detect scenario mode and extract dose-response parameter information
+  # ===========================================================================
+  has_db_pathogen      <- !is.null(scenario$pathogen_id)
+  has_custom_generator <- !is.null(scenario$dr_generator)
+
+  if (!has_db_pathogen && !has_custom_generator) {
+    stop("Scenario must have either 'pathogen_id' (database mode) or ",
+         "'dr_generator' (custom mode).")
   }
 
-  # ---- 3. extract parameter uncertainty information ----
-  param_info <- list()
-  if (model_type == "exponential") {
-    if (!is.na(chosen_row$k_log_mean) && !is.na(chosen_row$k_log_sd)) {
-      param_info[[1]] <- list(name = "k",
-                              log_mean = chosen_row$k_log_mean,
-                              log_sd   = chosen_row$k_log_sd)
-    } else if (!is.na(chosen_row$k)) {
-      param_info[[1]] <- list(name = "k",
-                              log_mean = log(chosen_row$k),
-                              log_sd   = 0.01)
+  if (has_db_pathogen) {
+    # ----- (A) Database mode: read log-normal parameters from pathogen_db -----
+    rec <- pathogen_info(scenario$pathogen_id)
+    if (nrow(rec) == 0) stop("Pathogen not found in database.")
+    chosen_row <- rec[1, ]
+    model_type <- chosen_row$model
+    if (is.null(model_type) || is.na(model_type)) {
+      stop("Model type not found in pathogen database.")
     }
-  } else if (model_type == "exact_beta_poisson") {
-    if (!is.na(chosen_row$alpha_log_mean) && !is.na(chosen_row$alpha_log_sd)) {
-      param_info[[length(param_info)+1]] <- list(name = "alpha",
-                                                 log_mean = chosen_row$alpha_log_mean,
-                                                 log_sd   = chosen_row$alpha_log_sd)
-    } else if (!is.na(chosen_row$alpha)) {
-      param_info[[length(param_info)+1]] <- list(name = "alpha",
-                                                 log_mean = log(chosen_row$alpha),
-                                                 log_sd   = 0.01)
+
+    param_info <- list()
+    if (model_type == "exponential") {
+      if (!is.na(chosen_row$k_log_mean) && !is.na(chosen_row$k_log_sd)) {
+        param_info[[1]] <- list(name = "k",
+                                log_mean = chosen_row$k_log_mean,
+                                log_sd   = chosen_row$k_log_sd)
+      } else if (!is.na(chosen_row$k)) {
+        param_info[[1]] <- list(name = "k",
+                                log_mean = log(chosen_row$k),
+                                log_sd   = 0.01)
+      }
+    } else if (model_type == "exact_beta_poisson") {
+      if (!is.na(chosen_row$alpha_log_mean) && !is.na(chosen_row$alpha_log_sd)) {
+        param_info[[length(param_info)+1]] <- list(name = "alpha",
+                                                   log_mean = chosen_row$alpha_log_mean,
+                                                   log_sd   = chosen_row$alpha_log_sd)
+      } else if (!is.na(chosen_row$alpha)) {
+        param_info[[length(param_info)+1]] <- list(name = "alpha",
+                                                   log_mean = log(chosen_row$alpha),
+                                                   log_sd   = 0.01)
+      }
+      if (!is.na(chosen_row$beta_log_mean) && !is.na(chosen_row$beta_log_sd)) {
+        param_info[[length(param_info)+1]] <- list(name = "beta",
+                                                   log_mean = chosen_row$beta_log_mean,
+                                                   log_sd   = chosen_row$beta_log_sd)
+      } else if (!is.na(chosen_row$beta)) {
+        param_info[[length(param_info)+1]] <- list(name = "beta",
+                                                   log_mean = log(chosen_row$beta),
+                                                   log_sd   = 0.01)
+      }
+    } else if (model_type == "approx_beta_poisson") {
+      if (!is.na(chosen_row$alpha_log_mean) && !is.na(chosen_row$alpha_log_sd)) {
+        param_info[[length(param_info)+1]] <- list(name = "alpha",
+                                                   log_mean = chosen_row$alpha_log_mean,
+                                                   log_sd   = chosen_row$alpha_log_sd)
+      } else if (!is.na(chosen_row$alpha)) {
+        param_info[[length(param_info)+1]] <- list(name = "alpha",
+                                                   log_mean = log(chosen_row$alpha),
+                                                   log_sd   = 0.01)
+      }
+      if (!is.na(chosen_row$N50_log_mean) && !is.na(chosen_row$N50_log_sd)) {
+        param_info[[length(param_info)+1]] <- list(name = "N50",
+                                                   log_mean = chosen_row$N50_log_mean,
+                                                   log_sd   = chosen_row$N50_log_sd)
+      } else if (!is.na(chosen_row$N50)) {
+        param_info[[length(param_info)+1]] <- list(name = "N50",
+                                                   log_mean = log(chosen_row$N50),
+                                                   log_sd   = 0.01)
+      }
+    } else {
+      stop("Unsupported dose-response model type: ", model_type)
     }
-    if (!is.na(chosen_row$beta_log_mean) && !is.na(chosen_row$beta_log_sd)) {
-      param_info[[length(param_info)+1]] <- list(name = "beta",
-                                                 log_mean = chosen_row$beta_log_mean,
-                                                 log_sd   = chosen_row$beta_log_sd)
-    } else if (!is.na(chosen_row$beta)) {
-      param_info[[length(param_info)+1]] <- list(name = "beta",
-                                                 log_mean = log(chosen_row$beta),
-                                                 log_sd   = 0.01)
-    }
-  } else if (model_type == "approx_beta_poisson") {
-    if (!is.na(chosen_row$alpha_log_mean) && !is.na(chosen_row$alpha_log_sd)) {
-      param_info[[length(param_info)+1]] <- list(name = "alpha",
-                                                 log_mean = chosen_row$alpha_log_mean,
-                                                 log_sd   = chosen_row$alpha_log_sd)
-    } else if (!is.na(chosen_row$alpha)) {
-      param_info[[length(param_info)+1]] <- list(name = "alpha",
-                                                 log_mean = log(chosen_row$alpha),
-                                                 log_sd   = 0.01)
-    }
-    if (!is.na(chosen_row$N50_log_mean) && !is.na(chosen_row$N50_log_sd)) {
-      param_info[[length(param_info)+1]] <- list(name = "N50",
-                                                 log_mean = chosen_row$N50_log_mean,
-                                                 log_sd   = chosen_row$N50_log_sd)
-    } else if (!is.na(chosen_row$N50)) {
-      param_info[[length(param_info)+1]] <- list(name = "N50",
-                                                 log_mean = log(chosen_row$N50),
-                                                 log_sd   = 0.01)
-    }
+
+    param_names <- sapply(param_info, `[[`, "name")
+
   } else {
-    stop("Unsupported dose-response model type: ", model_type)
+    # ----- (B) Custom mode: probe the generator for parameter names -----
+    probe       <- scenario$dr_generator(1)
+    model_type  <- probe$type
+    param_names <- setdiff(names(probe), "type")
+
+    # Use median of a small batch as point-estimate fallback in model_func
+    point_batch <- scenario$dr_generator(1000)
+    chosen_row  <- list(model = model_type)
+    for (nm in param_names) {
+      chosen_row[[nm]] <- median(point_batch[[nm]], na.rm = TRUE)
+    }
+    param_info <- NULL
   }
 
-  var_names <- c(var_exp, sapply(param_info, `[[`, "name"))
+  var_names <- c(var_exp, param_names)
   p_total <- length(var_names)
 
-  # ---- 4. generate Sobol' design matrices ----
+  # ===========================================================================
+  # 4. generate Sobol' design matrices (with 95% truncation)
+  # ===========================================================================
+
+  # Rejection-sampling helper for the database path
+  .bounded_lnorm <- function(log_mean, log_sd, lower, upper) {
+    force(log_mean); force(log_sd); force(lower); force(upper)
+    function(n) {
+      out <- numeric(n); cnt <- 0
+      while (cnt < n) {
+        s <- rlnorm(n - cnt, meanlog = log_mean, sdlog = log_sd)
+        s <- s[s >= lower & s <= upper]
+        if (length(s) > 0) {
+          out[(cnt + 1):(cnt + length(s))] <- s
+          cnt <- cnt + length(s)
+        }
+      }
+      out
+    }
+  }
+
   X1 <- matrix(NA_real_, nrow = n, ncol = p_total)
   X2 <- matrix(NA_real_, nrow = n, ncol = p_total)
   colnames(X1) <- colnames(X2) <- var_names
@@ -133,18 +190,55 @@ sobol_sensitivity <- function(scenario,
   X2[, 4] <- scenario$survival_dist(n)
   X2[, 5] <- scenario$deposition_dist(n)
 
-  for (j in seq_along(param_info)) {
-    col_idx <- p_exp + j
-    X1[, col_idx] <- rlnorm(n, meanlog = param_info[[j]]$log_mean,
-                            sdlog = param_info[[j]]$log_sd)
-    X2[, col_idx] <- rlnorm(n, meanlog = param_info[[j]]$log_mean,
-                            sdlog = param_info[[j]]$log_sd)
+  if (has_db_pathogen) {
+    # ---- Database mode: 95% PI rejection sampling from log-normal ----
+    for (j in seq_along(param_info)) {
+      col_idx <- p_exp + j
+      lm_j    <- param_info[[j]]$log_mean
+      ls_j    <- param_info[[j]]$log_sd
+
+      if (truncate_95) {
+        lo <- exp(lm_j - 1.96 * ls_j)
+        hi <- exp(lm_j + 1.96 * ls_j)
+        # alpha floor: avoid numerical overflow in 2^(1/alpha)
+        if (param_info[[j]]$name == "alpha") lo <- max(lo, 0.01)
+        gen <- .bounded_lnorm(lm_j, ls_j, lo, hi)
+        X1[, col_idx] <- gen(n)
+        X2[, col_idx] <- gen(n)
+      } else {
+        X1[, col_idx] <- rlnorm(n, meanlog = lm_j, sdlog = ls_j)
+        X2[, col_idx] <- rlnorm(n, meanlog = lm_j, sdlog = ls_j)
+      }
+    }
+  } else {
+    # ---- Custom mode: sample directly via dr_generator ----
+    dr1 <- scenario$dr_generator(n)
+    dr2 <- scenario$dr_generator(n)
+    for (j in seq_along(param_names)) {
+      col_idx <- p_exp + j
+      X1[, col_idx] <- dr1[[param_names[j]]]
+      X2[, col_idx] <- dr2[[param_names[j]]]
+    }
+    # Optional empirical truncation to 2.5%/97.5% if generator is untruncated
+    if (truncate_95) {
+      for (j in seq_along(param_names)) {
+        col_idx  <- p_exp + j
+        combined <- c(X1[, col_idx], X2[, col_idx])
+        lo <- quantile(combined, 0.025, na.rm = TRUE, names = FALSE)
+        hi <- quantile(combined, 0.975, na.rm = TRUE, names = FALSE)
+        if (param_names[j] == "alpha") lo <- max(lo, 0.01)
+        X1[, col_idx] <- pmin(pmax(X1[, col_idx], lo), hi)
+        X2[, col_idx] <- pmin(pmax(X2[, col_idx], lo), hi)
+      }
+    }
   }
 
-  # ---- 5. model function (uses colnames(X) for parameter detection) ----
+  # ===========================================================================
+  # 5. model function (uses colnames(X) for parameter detection)
+  # ===========================================================================
   model_func <- function(X) {
     dose <- X[, "C"] * X[, "IR"] * X[, "t"] * X[, "survival"] * X[, "deposition"]
-    cn <- colnames(X)   # available column names
+    cn <- colnames(X)
 
     if (model_type == "exponential") {
       k_vec <- if ("k" %in% cn) X[, "k"] else rep(chosen_row$k, nrow(X))

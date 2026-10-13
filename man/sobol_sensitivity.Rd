@@ -11,7 +11,8 @@ sobol_sensitivity(
   nboot = 100,
   conf = 0.95,
   frequency = NULL,
-  method = c("sobol2007", "sobol")
+  method = c("sobol2007", "sobol"),
+  truncate_95 = TRUE
 )
 }
 \arguments{
@@ -38,6 +39,13 @@ instead of single-exposure risk (using \code{annual_risk()}).}
 computes first-order and total-effect indices directly and is recommended
 for most applications. \code{"sobol"} uses the older algorithm and allows
 specifying higher-order interactions via \code{order}.}
+
+\item{truncate_95}{Logical. If TRUE (default), dose-response parameters are
+truncated to their 95\% uncertainty/prediction interval. In database mode,
+exact 95\% PI bounds are computed from log-normal parameters; alpha is
+additionally floored at 0.01 to prevent overflow. In custom mode, an
+empirical 2.5\%/97.5\% truncation is applied using samples drawn from the
+generator. Set to FALSE to reproduce the original (untruncated) behaviour.}
 }
 \value{
 An object of class \code{"sobol2007"} or \code{"sobol"} (from the \code{sensitivity}
@@ -49,6 +57,15 @@ Performs a Sobol' sensitivity analysis on single-exposure (or annual) infection
 risk. The input variables include exposure factors (C, IR, t, survival,
 deposition) and, when available, the dose-response parameters (k for
 exponential; alpha and N50 for approximate beta-Poisson; alpha and beta for
-exact beta-Poisson) with their uncertainty distributions taken from the
-pathogen database.
+exact beta-Poisson).
+}
+\details{
+Two scenario modes are supported:
+\itemize{
+\item \strong{Database mode}: scenario created with \code{pathogen_id}, parameters
+taken from the built-in pathogen database.
+\item \strong{Custom mode}: scenario created with \code{dr_generator}, parameter
+distributions obtained directly from the generator (supports
+pathogens not present in the database).
+}
 }
